@@ -20,8 +20,15 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+var (
+	ErrCallAddAfterWait = errType{errors.New("cannot call add after wait")}
+)
+
+type errType struct{ error }
 
 // RunConcurrently 并发运行fn，一旦有error发生终止运行。
 func RunConcurrently(ctx context.Context, fn ...func(context.Context) error) (wait func(fastExit bool) error) {
@@ -142,121 +149,172 @@ func RunSequentially(ctx context.Context, fn ...func(context.Context) error) err
 	return nil
 }
 
-// NewRunner 该函数提供同时最多运行max个协程fn，一旦fn发生error便终止fn运行。
+// NewRunner 该函数提供同时最多运行 max 个协程运行 fn，一旦 fn 发生 error 或 panic 便终止运行。
 //
-// max小于等于0表示不限制协程数。
+// ctx 上下文，当 ctx canceled 将终止所有 fn 运行，并返回 ctx.Err()。
 //
-// 朝返回的run函数中添加fn，若block为true表示正在运行的任务数已达到max则会阻塞。
+// max 表示最多多少个协程运行 fn。小于等于 0 表示不限制协程数。
 //
-// run函数返回error为任务fn返回的第一个error，与wait函数返回的error为同一个。
+// fn 为要运行的函数。T 由 add 函数提供。若 fn 返回 error 或者 panic 则终止所有 fn 运行。fn panic 将被恢复，并以 error 形式返回。
 //
-// 注意请在add完所有任务后调用wait。
+// add 为 fn 提供 T。block 为 true 表示当某一时刻运行 fn 数量达到 max 时，阻塞当前协程添加 T。反之，不阻塞当前协程。
+//
+// wait 阻塞当前协程，等待运行完毕。fastExit 为 true 表示发生错误时，函数立即返回。反之，表示等待所有 fn 都终止后再返回。
+//
+// add 函数返回的 error 不为 nil 时，是为 fn 返回的第一个 error，且与 wait 函数返回的 error 为同一个。
+//
+// 若 fn 为 nil 将触发 panic。
+//
+// 请注意在 add 完所有任务后再调用 wait，否则触发 panic 返回 ErrCallAddAfterWait。
 func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) error) (
-	run func(t T, block bool) error, wait func(fastExit bool) error) {
+	add func(t T, block bool) error, wait func(fastExit bool) error) {
 
+	// 校验。
 	if fn == nil {
-		panic("fn can't be nil")
+		panic("NewRunner: fn can't be nil")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	var err error
+	// 如是 ctx canceled，就不必再分配资源，直接返回。
 	select {
 	case <-ctx.Done():
-		err = ctx.Err()
-		if err == nil {
-			err = context.Canceled
-		}
+		err := ctx.Err()
 		return func(t T, block bool) error { return err }, func(bool) error { return err }
 	default:
 	}
 
-	var limiter chan struct{}
+	var aerr atomic.Value     // 错误标志。
+	var limiter chan struct{} // 限数器。
 	if max > 0 {
 		limiter = make(chan struct{}, max)
 	}
-	ctx, cancel := context.WithCancel(ctx)
-	wg := sync.WaitGroup{}
-	once := &sync.Once{}
-	lock := &sync.Mutex{}
-	fnWrapper := func(t T) {
-		var ferr error
+	innerCtx, cancel := context.WithCancel(ctx) // 通知终止 fn 的上下文。
+	wg := sync.WaitGroup{}                      // 计数器。
+	errSetFlag := make(chan struct{})           // err 是否设置信号。
+	errSetOnce := sync.Once{}                   // 设置 err 保护的函数。
+
+	// 设置 err，只有 fn 返回的 err 且非 ctx.Err() 才能设置进去。
+	setErrFn := func(fnErr error) {
+		if fnErr != nil && !errors.Is(fnErr, innerCtx.Err()) && !errors.Is(fnErr, ctx.Err()) {
+			errSetOnce.Do(func() {
+				aerr.Store(fnErr)
+				close(errSetFlag)
+			})
+		}
+	}
+
+	// 阻塞获取终止态的 err。
+	getErrFn := func() error {
+		<-errSetFlag
+		v, _ := aerr.Load().(error)
+		return v
+	}
+
+	// 包装执行函数，减少计数器，减少限数器，cancel innerCtx，以及设置 err。
+	fnWrapper := func(t T, useLimiter bool) {
+		var fnErr error
 		defer func() {
 			if p := recover(); p != nil {
-				ferr = fmt.Errorf("panic: %v [recovered]\n%s\n", p, stackTrace())
+				fnErr = fmt.Errorf("panic: %v [recovered]\n%s", p, getStackCallers())
 			}
-
-			if ferr != nil && !errors.Is(ferr, context.Canceled) {
-				lock.Lock()
-				if err == nil || errors.Is(err, context.Canceled) {
-					err = ferr
-				}
-				lock.Unlock()
-				cancel()
+			if fnErr != nil {
+				cancel() // 通知终止运行。
+				setErrFn(fnErr)
 			}
-			if limiter != nil {
+			if limiter != nil && useLimiter {
 				<-limiter
 			}
 			wg.Done()
 		}()
-		ferr = fn(ctx, t)
+		select {
+		case <-innerCtx.Done():
+		default:
+			fnErr = fn(ctx, t)
+		}
 	}
-	run = func(t T, block bool) error {
-		wg.Add(1)
-		if block && limiter != nil {
-			select {
-			case <-ctx.Done():
-				lock.Lock()
-				if ctxErr := ctx.Err(); ctxErr != nil && err == nil {
-					err = ctxErr
+
+	waitCallFlag := make(chan struct{})
+	add = func(t T, block bool) error {
+		// 不允许在 wait 后再调用。
+		select {
+		case <-waitCallFlag:
+			panic(ErrCallAddAfterWait)
+		default:
+		}
+
+		wg.Add(1) // 增加计数器。
+
+		// 不阻塞添加任务。
+		if !block || limiter == nil {
+			go func() {
+				useLimiter := false
+				if limiter != nil {
+					useLimiter = true
+					limiter <- struct{}{}
 				}
-				lock.Unlock()
-				wg.Done()
-				return err
-			case limiter <- struct{}{}:
-			}
-			go fnWrapper(t)
+				fnWrapper(t, useLimiter)
+			}()
+			err, _ := aerr.Load().(error)
 			return err
 		}
-		go func() {
-			if limiter != nil {
-				select {
-				case <-ctx.Done():
-					lock.Lock()
-					if ctxErr := ctx.Err(); ctxErr != nil && err == nil {
-						err = ctxErr
-					}
-					lock.Unlock()
-					wg.Done()
-					return
-				case limiter <- struct{}{}:
-				}
-			}
-			fnWrapper(t)
-		}()
 
+		// 阻塞添加任务。
+		select {
+		case <-innerCtx.Done(): // 任务已终止。
+			wg.Done() // 减少计数器。
+			return getErrFn()
+		case limiter <- struct{}{}: // 获取限数器。
+			go fnWrapper(t, true)
+		}
+
+		err, _ := aerr.Load().(error)
 		return err
 	}
+
+	waitOnce := sync.Once{}
 	wait = func(fastExit bool) error {
-		once.Do(func() {
+		waitOnce.Do(func() {
+			close(waitCallFlag)
 			go func() {
+				// 等待所有协程退出。
 				wg.Wait()
-				cancel()
+
+				// 有可能是 ctx canceled。
+				select {
+				case <-innerCtx.Done(): // innerCtx 只有发生 err 或者 ctx canceled，才会 canceled。
+					errSetOnce.Do(func() {
+						aerr.Store(ctx.Err())
+						close(errSetFlag)
+					})
+				default:
+				}
+
+				// 可能本就没有 err。
+				errSetOnce.Do(func() {
+					close(errSetFlag)
+					cancel()
+				})
 			}()
 		})
+
+		// 快速退出，不等待所有协程完毕。
 		if fastExit {
-			select {
-			case <-ctx.Done():
-				return err
-			}
+			return getErrFn()
 		}
+
 		wg.Wait()
-		return err
+		return getErrFn()
 	}
 
 	return
 }
+
+/*func NewRunnerWithChan[T any](ctx context.Context, max int, fn func(context.Context, T) error) (
+	add func(block bool) chan<- T, wait func(fastExit bool) <-chan error) {
+
+}*/
 
 // RunData 并发将jobs传递给fn函数运行，一旦发生error便立即返回该error，并结束其它协程。
 func RunData[T any](ctx context.Context, fn func(context.Context, T) error, fastExit bool, jobs ...T) error {
@@ -513,6 +571,28 @@ func RunPeriodically(period time.Duration) (run func(fn func())) {
 			panic(p)
 		}
 	}
+}
+
+func getStackCallers() string {
+	callers := make([]uintptr, 3*12)
+	n := runtime.Callers(3, callers)
+	callers = callers[:n]
+	frames := runtime.CallersFrames(callers)
+	callers = nil
+	var (
+		frame runtime.Frame
+		more  bool
+	)
+	sb := &strings.Builder{}
+	for {
+		frame, more = frames.Next()
+		_, _ = fmt.Fprintf(sb, "%s\n", frame.Function)
+		_, _ = fmt.Fprintf(sb, "    %s:%v\n", frame.File, frame.Line)
+		if !more {
+			break
+		}
+	}
+	return sb.String()
 }
 
 func stackTrace() string {

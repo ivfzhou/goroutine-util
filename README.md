@@ -1,8 +1,8 @@
-# 1. 说明
+# 说明
 
 Go 协程工具函数库
 
-# 2. 使用
+# 使用
 
 ```shell
 go get gitee.com/ivfzhou/goroutine-util@latest
@@ -15,16 +15,24 @@ func RunConcurrently(ctx context.Context, fn ...func(context.Context) error) (wa
 // RunSequentially 依次运行fn，当有error发生时停止后续fn运行。
 func RunSequentially(ctx context.Context, fn ...func (context.Context) error) error
 
-// NewRunner 该函数提供同时最多运行max个协程fn，一旦fn发生error便终止fn运行。
+// NewRunner 该函数提供同时最多运行 max 个协程运行 fn，一旦 fn 发生 error 或 panic 便终止运行。
 //
-// max小于等于0表示不限制协程数。
+// ctx 上下文，当 ctx canceled 将终止所有 fn 运行，并返回 ctx.Err()。
 //
-// 朝返回的run函数中添加fn，若block为true表示正在运行的任务数已达到max则会阻塞。
+// max 表示最多多少个协程运行 fn。小于等于 0 表示不限制协程数。
 //
-// run函数返回error为任务fn返回的第一个error，与wait函数返回的error为同一个。
+// fn 为要运行的函数。T 由 add 函数提供。若 fn 返回 error 或者 panic 则终止所有 fn 运行。fn panic 将被恢复，并以 error 形式返回。
 //
-// 注意请在add完所有任务后调用wait。
-func NewRunner[T any](ctx context.Context, max int, fn func (context.Context, T) error) (run func (t T, block bool) error, wait func (fastExit bool) error)
+// add 为 fn 提供 T。block 为 true 表示当某一时刻运行 fn 数量达到 max 时，阻塞当前协程添加 T。反之，不阻塞当前协程。
+//
+// wait 阻塞当前协程，等待运行完毕。fastExit 为 true 表示发生错误时，函数立即返回。反之，表示等待所有 fn 都终止后再返回。
+//
+// add 函数返回的 error 不为 nil 时，是为 fn 返回的第一个 error，且与 wait 函数返回的 error 为同一个。
+//
+// 若 fn 为 nil 将触发 panic。
+//
+// 请注意在 add 完所有任务后再调用 wait，否则触发 panic 返回 ErrCallAddAfterWait。
+func NewRunner[T any](ctx context.Context, max int, fn func (context.Context, T) error) (add func (t T, block bool) error, wait func (fastExit bool) error)
 
 // RunData 并发将jobs传递给fn函数运行，一旦发生error便立即返回该error，并结束其它协程。
 func RunData[T any](ctx context.Context, fn func (context.Context, T) error, fastExit bool, jobs ...T) error
@@ -55,8 +63,9 @@ func ListenChan[T any](chans ...<-chan T) (ch <-chan T)
 
 // RunPeriodically 依次运行fn，每个fn之间至少间隔period时间。
 func RunPeriodically(period time.Duration) (run func (fn func ()))
+
 ```
 
-# 3. 联系作者
+# 联系作者
 
 电邮：ifzhou@126.com

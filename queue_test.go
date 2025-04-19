@@ -15,7 +15,7 @@ package goroutine_util_test
 import (
 	"testing"
 
-	"gitee.com/ivfzhou/goroutine-util"
+	goroutine_util "gitee.com/ivfzhou/goroutine-util"
 )
 
 func TestQueue(t *testing.T) {
