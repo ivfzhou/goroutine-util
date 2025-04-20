@@ -489,14 +489,6 @@ func TestNewRunner(t *testing.T) {
 	fn("多次 add，设置 max，add 阻塞", 50, func() { testNewRunner4ManyAdd(t, 100, true, true) })
 	fn("多次 add，设置 max，wait 阻塞", 50, func() { testNewRunner4ManyAdd(t, 100, false, false) })
 	fn("多次 add，设置 max，add、wait 阻塞", 50, func() { testNewRunner4ManyAdd(t, 100, true, true) })
-	fn("ctx cancel，不阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, false, true) })
-	fn("ctx cancel，wait 阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, false, false) })
-	fn("ctx cancel，add 阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, true, true) })
-	fn("ctx cancel，add、wait 阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, true, false) })
-	fn("ctx cancel，设置 max", 50, func() { testNewRunner4CtxCancel(t, 100, false, true) })
-	fn("ctx cancel，设置 max，add 阻塞", 50, func() { testNewRunner4CtxCancel(t, 100, true, true) })
-	fn("ctx cancel，设置 max，wait 阻塞", 50, func() { testNewRunner4CtxCancel(t, 100, false, false) })
-	fn("ctx cancel，设置 max，add、wait 阻塞", 50, func() { testNewRunner4CtxCancel(t, 100, true, true) })
 	fn("随机 add 阻塞，不阻塞", 100, func() { testNewRunner4RandomAddBlock(t, 0, true) })
 	fn("随机 add 阻塞，wait 阻塞", 100, func() { testNewRunner4RandomAddBlock(t, 0, false) })
 	fn("随机 add 阻塞，add、wait 阻塞", 100, func() { testNewRunner4RandomAddBlock(t, 0, false) })
@@ -506,6 +498,14 @@ func TestNewRunner(t *testing.T) {
 	fn("wait fast exit，设置 max", 50, func() { testNewRunner4WaitFastExit(t, 100) })
 	fn("add after wait，不阻塞", 100, func() { testNewRunner4AddAfterWait(t, 0) })
 	fn("add after wait，设置 max", 50, func() { testNewRunner4AddAfterWait(t, 100) })
+	fn("ctx cancel，不阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, false, true) })
+	fn("ctx cancel，wait 阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, false, false) })
+	fn("ctx cancel，add 阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, true, true) })
+	fn("ctx cancel，add、wait 阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, true, false) })
+	fn("ctx cancel，设置 max", 50, func() { testNewRunner4CtxCancel(t, 100, false, true) })
+	fn("ctx cancel，设置 max，add 阻塞", 50, func() { testNewRunner4CtxCancel(t, 100, true, true) })
+	fn("ctx cancel，设置 max，wait 阻塞", 50, func() { testNewRunner4CtxCancel(t, 100, false, false) })
+	fn("ctx cancel，设置 max，add、wait 阻塞", 50, func() { testNewRunner4CtxCancel(t, 100, true, true) })
 }
 
 func testNewRunner(t *testing.T, max int, addB, waitB bool) {
@@ -765,13 +765,44 @@ func testNewRunner4RandomAddBlock(t *testing.T, max int, waitB bool) {
 	}
 }
 
+type testCtx struct {
+	e atomic.Value
+	c chan struct{}
+}
+
+func (t *testCtx) Err() error {
+	err, _ := t.e.Load().(error)
+	return err
+}
+
+func (t *testCtx) Done() <-chan struct{} {
+	return t.c
+}
+
+func (*testCtx) Deadline() (time.Time, bool) {
+	return time.Time{}, false
+}
+
+func (*testCtx) Value(any) any {
+	return nil
+}
+
 func testNewRunner4CtxCancel(t *testing.T, max int, addB, waitB bool) {
 	type data struct {
 		x int32
 	}
-	ctx, cancel := context.WithCancelCause(context.Background())
-	defer cancel(nil)
+	done := make(chan struct{})
+	once := sync.Once{}
 	expectedErr := errors.New("expected error")
+	ctx := &testCtx{
+		c: done,
+	}
+	doneFn := func() {
+		once.Do(func() {
+			ctx.e.Store(expectedErr)
+			close(done)
+		})
+	}
 	count := int32(0)
 	flag := rand.Int31n(100)
 	add, wait := goroutine_util.NewRunner(ctx, max, func(ctx context.Context, t *data) error {
@@ -784,18 +815,18 @@ func testNewRunner4CtxCancel(t *testing.T, max int, addB, waitB bool) {
 		go func() {
 			n := rand.Int31n(100)
 			if n == flag {
-				cancel(expectedErr)
+				doneFn()
 			}
 			err := add(&data{n}, addB)
 			atomic.AddInt32(&actualCount, n)
-			if err != nil && context.Cause(ctx) != expectedErr {
+			if err != nil && ctx.Err() != expectedErr {
 				t.Errorf("unexpected error: got %v, want %v", err, expectedErr)
 			}
 		}()
 	}
 	time.Sleep(time.Millisecond * 100)
 	err := wait(waitB)
-	if err != nil && context.Cause(ctx) != expectedErr {
+	if err != nil && ctx.Err() != expectedErr {
 		t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 	}
 	if count > actualCount {
