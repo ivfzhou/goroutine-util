@@ -426,6 +426,77 @@ func TestRunPeriodically(t *testing.T) {
 }
 
 func TestNewRunner(t *testing.T) {
+	tests := []struct {
+		name  string
+		times int
+		fn    func()
+	}{
+		{"正常运行，全不阻塞", 50, func() { testNewRunner(t, 0, false, true) }},
+		{"正常运行，wait 阻塞", 50, func() { testNewRunner(t, 0, false, false) }},
+		{"正常运行，add 阻塞", 50, func() { testNewRunner(t, 0, true, true) }},
+		{"正常运行，add、wait 阻塞", 50, func() { testNewRunner(t, 0, true, false) }},
+		{"正常运行，设置 max", 25, func() { testNewRunner(t, 100, false, true) }},
+		{"正常运行，设置 max，add 阻塞", 25, func() { testNewRunner(t, 100, true, true) }},
+		{"正常运行，设置 max，wait 阻塞", 25, func() { testNewRunner(t, 100, false, false) }},
+		{"正常运行，设置 max，add、wait 阻塞", 25, func() { testNewRunner(t, 100, true, false) }},
+		{"运行 error，不阻塞", 50, func() { testNewRunner4Error(t, 0, false, true) }},
+		{"运行 error，wait 阻塞", 50, func() { testNewRunner4Error(t, 0, false, false) }},
+		{"运行 error，add 阻塞", 50, func() { testNewRunner4Error(t, 0, true, true) }},
+		{"运行 error，add、wait 阻塞", 50, func() { testNewRunner4Error(t, 0, true, false) }},
+		{"运行 error，设置 max", 25, func() { testNewRunner4Error(t, 100, false, true) }},
+		{"运行 error，设置 max，add 阻塞", 25, func() { testNewRunner4Error(t, 100, true, true) }},
+		{"运行 error，设置 max，wait 阻塞", 25, func() { testNewRunner4Error(t, 100, false, false) }},
+		{"运行 error，设置 max，add、wait 阻塞", 25, func() { testNewRunner4Error(t, 100, true, true) }},
+		{"运行 panic，不阻塞", 50, func() { testNewRunner4Panic(t, 0, false, true) }},
+		{"运行 panic，wait 阻塞", 50, func() { testNewRunner4Panic(t, 0, false, false) }},
+		{"运行 panic，add 阻塞", 50, func() { testNewRunner4Panic(t, 0, true, true) }},
+		{"运行 panic，add、wait 阻塞", 50, func() { testNewRunner4Panic(t, 0, true, false) }},
+		{"运行 panic，设置 max", 25, func() { testNewRunner4Panic(t, 100, false, true) }},
+		{"运行 panic，设置 max，add 阻塞", 25, func() { testNewRunner4Panic(t, 100, true, true) }},
+		{"运行 panic，设置 max，wait 阻塞", 25, func() { testNewRunner4Panic(t, 100, false, false) }},
+		{"运行 panic，设置 max，add、wait 阻塞", 25, func() { testNewRunner4Panic(t, 100, true, true) }},
+		{"长时间运行，不阻塞", 50, func() { testNewRunner4LongTime(t, 0, false, true) }},
+		{"长时间运行，wait 阻塞", 2, func() { testNewRunner4LongTime(t, 0, false, false) }},
+		{"长时间运行，add 阻塞", 2, func() { testNewRunner4LongTime(t, 0, true, true) }},
+		{"长时间运行，add、wait 阻塞", 2, func() { testNewRunner4LongTime(t, 0, true, false) }},
+		{"长时间运行，设置 max", 2, func() { testNewRunner4LongTime(t, 100, false, true) }},
+		{"长时间运行，设置 max，add 阻塞", 2, func() { testNewRunner4LongTime(t, 100, true, true) }},
+		{"长时间运行，设置 max，wait 阻塞", 2, func() { testNewRunner4LongTime(t, 100, false, false) }},
+		{"长时间运行，设置 max，add、wait 阻塞", 2, func() { testNewRunner4LongTime(t, 100, true, true) }},
+		{"多次 wait，不阻塞", 50, func() { testNewRunner4ManyWait(t, 0, false, true) }},
+		{"多次 wait，wait 阻塞", 50, func() { testNewRunner4ManyWait(t, 0, false, false) }},
+		{"多次 wait，add 阻塞", 50, func() { testNewRunner4ManyWait(t, 0, true, true) }},
+		{"多次 wait，add、wait 阻塞", 50, func() { testNewRunner4ManyWait(t, 0, true, false) }},
+		{"多次 wait，设置 max", 25, func() { testNewRunner4ManyWait(t, 100, false, true) }},
+		{"多次 wait，设置 max，add 阻塞", 25, func() { testNewRunner4ManyWait(t, 100, true, true) }},
+		{"多次 wait，设置 max，wait 阻塞", 25, func() { testNewRunner4ManyWait(t, 100, false, false) }},
+		{"多次 wait，设置 max，add、wait 阻塞", 25, func() { testNewRunner4ManyWait(t, 100, true, true) }},
+		{"多次 add，不阻塞", 50, func() { testNewRunner4ManyAdd(t, 0, false, true) }},
+		{"多次 add，wait 阻塞", 50, func() { testNewRunner4ManyAdd(t, 0, false, false) }},
+		{"多次 add，add 阻塞", 50, func() { testNewRunner4ManyAdd(t, 0, true, true) }},
+		{"多次 add，add、wait 阻塞", 50, func() { testNewRunner4ManyAdd(t, 0, true, false) }},
+		{"多次 add，设置 max", 25, func() { testNewRunner4ManyAdd(t, 100, false, true) }},
+		{"多次 add，设置 max，add 阻塞", 25, func() { testNewRunner4ManyAdd(t, 100, true, true) }},
+		{"多次 add，设置 max，wait 阻塞", 25, func() { testNewRunner4ManyAdd(t, 100, false, false) }},
+		{"多次 add，设置 max，add、wait 阻塞", 25, func() { testNewRunner4ManyAdd(t, 100, true, true) }},
+		{"随机 add 阻塞，不阻塞", 50, func() { testNewRunner4RandomAddBlock(t, 0, true) }},
+		{"随机 add 阻塞，wait 阻塞", 50, func() { testNewRunner4RandomAddBlock(t, 0, false) }},
+		{"随机 add 阻塞，add、wait 阻塞", 50, func() { testNewRunner4RandomAddBlock(t, 0, false) }},
+		{"随机 add 阻塞，设置 max", 25, func() { testNewRunner4RandomAddBlock(t, 100, true) }},
+		{"随机 add 阻塞，设置 max，wait 阻塞", 25, func() { testNewRunner4RandomAddBlock(t, 100, false) }},
+		{"wait fast exit，不阻塞", 50, func() { testNewRunner4WaitFastExit(t, 0) }},
+		{"wait fast exit，设置 max", 25, func() { testNewRunner4WaitFastExit(t, 100) }},
+		{"add after wait，不阻塞", 50, func() { testNewRunner4AddAfterWait(t, 0) }},
+		{"add after wait，设置 max", 25, func() { testNewRunner4AddAfterWait(t, 100) }},
+		{"ctx cancel，不阻塞", 50, func() { testNewRunner4CtxCancel(t, 0, false, true) }},
+		{"ctx cancel，wait 阻塞", 50, func() { testNewRunner4CtxCancel(t, 0, false, false) }},
+		{"ctx cancel，add 阻塞", 50, func() { testNewRunner4CtxCancel(t, 0, true, true) }},
+		{"ctx cancel，add、wait 阻塞", 50, func() { testNewRunner4CtxCancel(t, 0, true, false) }},
+		{"ctx cancel，设置 max", 25, func() { testNewRunner4CtxCancel(t, 100, false, true) }},
+		{"ctx cancel，设置 max，add 阻塞", 25, func() { testNewRunner4CtxCancel(t, 100, true, true) }},
+		{"ctx cancel，设置 max，wait 阻塞", 25, func() { testNewRunner4CtxCancel(t, 100, false, false) }},
+		{"ctx cancel，设置 max，add、wait 阻塞", 25, func() { testNewRunner4CtxCancel(t, 100, true, true) }},
+	}
 	fn := func(name string, total int, f func()) {
 		if t.Failed() {
 			return
@@ -441,71 +512,11 @@ func TestNewRunner(t *testing.T) {
 		}
 		fmt.Printf(" done %v\n", time.Since(now))
 	}
-	fn("正常运行，全不阻塞", 100, func() { testNewRunner(t, 0, false, true) })
-	fn("正常运行，wait 阻塞", 100, func() { testNewRunner(t, 0, false, false) })
-	fn("正常运行，add 阻塞", 100, func() { testNewRunner(t, 0, true, true) })
-	fn("正常运行，add、wait 阻塞", 100, func() { testNewRunner(t, 0, true, false) })
-	fn("正常运行，设置 max", 50, func() { testNewRunner(t, 100, false, true) })
-	fn("正常运行，设置 max，add 阻塞", 50, func() { testNewRunner(t, 100, true, true) })
-	fn("正常运行，设置 max，wait 阻塞", 50, func() { testNewRunner(t, 100, false, false) })
-	fn("正常运行，设置 max，add、wait 阻塞", 50, func() { testNewRunner(t, 100, true, false) })
-	fn("运行 error，不阻塞", 100, func() { testNewRunner4Error(t, 0, false, true) })
-	fn("运行 error，wait 阻塞", 100, func() { testNewRunner4Error(t, 0, false, false) })
-	fn("运行 error，add 阻塞", 100, func() { testNewRunner4Error(t, 0, true, true) })
-	fn("运行 error，add、wait 阻塞", 100, func() { testNewRunner4Error(t, 0, true, false) })
-	fn("运行 error，设置 max", 50, func() { testNewRunner4Error(t, 100, false, true) })
-	fn("运行 error，设置 max，add 阻塞", 50, func() { testNewRunner4Error(t, 100, true, true) })
-	fn("运行 error，设置 max，wait 阻塞", 50, func() { testNewRunner4Error(t, 100, false, false) })
-	fn("运行 error，设置 max，add、wait 阻塞", 50, func() { testNewRunner4Error(t, 100, true, true) })
-	fn("运行 panic，不阻塞", 100, func() { testNewRunner4Panic(t, 0, false, true) })
-	fn("运行 panic，wait 阻塞", 100, func() { testNewRunner4Panic(t, 0, false, false) })
-	fn("运行 panic，add 阻塞", 100, func() { testNewRunner4Panic(t, 0, true, true) })
-	fn("运行 panic，add、wait 阻塞", 100, func() { testNewRunner4Panic(t, 0, true, false) })
-	fn("运行 panic，设置 max", 50, func() { testNewRunner4Panic(t, 100, false, true) })
-	fn("运行 panic，设置 max，add 阻塞", 50, func() { testNewRunner4Panic(t, 100, true, true) })
-	fn("运行 panic，设置 max，wait 阻塞", 50, func() { testNewRunner4Panic(t, 100, false, false) })
-	fn("运行 panic，设置 max，add、wait 阻塞", 50, func() { testNewRunner4Panic(t, 100, true, true) })
-	fn("长时间运行，不阻塞", 100, func() { testNewRunner4LongTime(t, 0, false, true) })
-	fn("长时间运行，wait 阻塞", 2, func() { testNewRunner4LongTime(t, 0, false, false) })
-	fn("长时间运行，add 阻塞", 2, func() { testNewRunner4LongTime(t, 0, true, true) })
-	fn("长时间运行，add、wait 阻塞", 2, func() { testNewRunner4LongTime(t, 0, true, false) })
-	fn("长时间运行，设置 max", 2, func() { testNewRunner4LongTime(t, 100, false, true) })
-	fn("长时间运行，设置 max，add 阻塞", 2, func() { testNewRunner4LongTime(t, 100, true, true) })
-	fn("长时间运行，设置 max，wait 阻塞", 2, func() { testNewRunner4LongTime(t, 100, false, false) })
-	fn("长时间运行，设置 max，add、wait 阻塞", 2, func() { testNewRunner4LongTime(t, 100, true, true) })
-	fn("多次 wait，不阻塞", 100, func() { testNewRunner4ManyWait(t, 0, false, true) })
-	fn("多次 wait，wait 阻塞", 100, func() { testNewRunner4ManyWait(t, 0, false, false) })
-	fn("多次 wait，add 阻塞", 100, func() { testNewRunner4ManyWait(t, 0, true, true) })
-	fn("多次 wait，add、wait 阻塞", 100, func() { testNewRunner4ManyWait(t, 0, true, false) })
-	fn("多次 wait，设置 max", 50, func() { testNewRunner4ManyWait(t, 100, false, true) })
-	fn("多次 wait，设置 max，add 阻塞", 50, func() { testNewRunner4ManyWait(t, 100, true, true) })
-	fn("多次 wait，设置 max，wait 阻塞", 50, func() { testNewRunner4ManyWait(t, 100, false, false) })
-	fn("多次 wait，设置 max，add、wait 阻塞", 50, func() { testNewRunner4ManyWait(t, 100, true, true) })
-	fn("多次 add，不阻塞", 100, func() { testNewRunner4ManyAdd(t, 0, false, true) })
-	fn("多次 add，wait 阻塞", 100, func() { testNewRunner4ManyAdd(t, 0, false, false) })
-	fn("多次 add，add 阻塞", 100, func() { testNewRunner4ManyAdd(t, 0, true, true) })
-	fn("多次 add，add、wait 阻塞", 100, func() { testNewRunner4ManyAdd(t, 0, true, false) })
-	fn("多次 add，设置 max", 50, func() { testNewRunner4ManyAdd(t, 100, false, true) })
-	fn("多次 add，设置 max，add 阻塞", 50, func() { testNewRunner4ManyAdd(t, 100, true, true) })
-	fn("多次 add，设置 max，wait 阻塞", 50, func() { testNewRunner4ManyAdd(t, 100, false, false) })
-	fn("多次 add，设置 max，add、wait 阻塞", 50, func() { testNewRunner4ManyAdd(t, 100, true, true) })
-	fn("随机 add 阻塞，不阻塞", 100, func() { testNewRunner4RandomAddBlock(t, 0, true) })
-	fn("随机 add 阻塞，wait 阻塞", 100, func() { testNewRunner4RandomAddBlock(t, 0, false) })
-	fn("随机 add 阻塞，add、wait 阻塞", 100, func() { testNewRunner4RandomAddBlock(t, 0, false) })
-	fn("随机 add 阻塞，设置 max", 50, func() { testNewRunner4RandomAddBlock(t, 100, true) })
-	fn("随机 add 阻塞，设置 max，wait 阻塞", 50, func() { testNewRunner4RandomAddBlock(t, 100, false) })
-	fn("wait fast exit，不阻塞", 100, func() { testNewRunner4WaitFastExit(t, 0) })
-	fn("wait fast exit，设置 max", 50, func() { testNewRunner4WaitFastExit(t, 100) })
-	fn("add after wait，不阻塞", 100, func() { testNewRunner4AddAfterWait(t, 0) })
-	fn("add after wait，设置 max", 50, func() { testNewRunner4AddAfterWait(t, 100) })
-	fn("ctx cancel，不阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, false, true) })
-	fn("ctx cancel，wait 阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, false, false) })
-	fn("ctx cancel，add 阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, true, true) })
-	fn("ctx cancel，add、wait 阻塞", 100, func() { testNewRunner4CtxCancel(t, 0, true, false) })
-	fn("ctx cancel，设置 max", 50, func() { testNewRunner4CtxCancel(t, 100, false, true) })
-	fn("ctx cancel，设置 max，add 阻塞", 50, func() { testNewRunner4CtxCancel(t, 100, true, true) })
-	fn("ctx cancel，设置 max，wait 阻塞", 50, func() { testNewRunner4CtxCancel(t, 100, false, false) })
-	fn("ctx cancel，设置 max，add、wait 阻塞", 50, func() { testNewRunner4CtxCancel(t, 100, true, true) })
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fn(tt.name, tt.times, tt.fn)
+		})
+	}
 }
 
 func testNewRunner(t *testing.T, max int, addB, waitB bool) {
@@ -721,7 +732,7 @@ func testNewRunner4ManyAdd(t *testing.T, max int, addB, waitB bool) {
 	for i := int32(0); i < 1000; i++ {
 		go func() {
 			n := rand.Int31n(100)
-			add(&data{n}, addB)
+			_ = add(&data{n}, addB)
 			atomic.AddInt32(&actualCount, n)
 		}()
 	}
@@ -751,7 +762,7 @@ func testNewRunner4RandomAddBlock(t *testing.T, max int, waitB bool) {
 		go func() {
 			addB := rand.Int31n(2) == 1
 			n := rand.Int31n(100)
-			add(&data{n}, addB)
+			_ = add(&data{n}, addB)
 			atomic.AddInt32(&actualCount, n)
 		}()
 	}
@@ -851,7 +862,9 @@ func testNewRunner4WaitFastExit(t *testing.T, max int) {
 		return nil
 	})
 	flag := 50 + rand.Int31n(50)
+	wg := sync.WaitGroup{}
 	for i := int32(0); i < 1000; i++ {
+		wg.Add(1)
 		go func() {
 			n := rand.Int31n(100)
 			atomic.AddInt32(&expectedCount, n)
@@ -860,12 +873,14 @@ func testNewRunner4WaitFastExit(t *testing.T, max int) {
 			}
 			addB := rand.Int31n(2) == 1
 			err := add(&data{n}, addB)
+			wg.Done()
 			if err != nil && context.Cause(ctx) != expectedErr {
 				t.Errorf("unexpected error: got %v, want %v", err, expectedErr)
 			}
 		}()
 	}
 
+	wg.Wait()
 	err := wait(true)
 	if atomic.LoadInt32(&remain) == 0 {
 		t.Errorf("unexpected remain: got %v, want 0", remain)
@@ -889,7 +904,7 @@ func testNewRunner4AddAfterWait(t *testing.T, max int) {
 	for i := int32(0); i < 1000; i++ {
 		go func() {
 			if rand.Int31n(100) == flag {
-				wait(rand.Int31n(2) == 1)
+				_ = wait(rand.Int31n(2) == 1)
 			}
 		}()
 		go func() {
@@ -899,7 +914,7 @@ func testNewRunner4AddAfterWait(t *testing.T, max int) {
 					t.Errorf("unexpected recoverd value: want %v, got %v", goroutine_util.ErrCallAddAfterWait, p)
 				}
 			}()
-			add(&data{}, rand.Int31n(2) == 1)
+			_ = add(&data{}, rand.Int31n(2) == 1)
 		}()
 	}
 }
