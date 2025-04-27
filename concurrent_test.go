@@ -805,13 +805,16 @@ func testNewRunner4CtxCancel(t *testing.T, max int, addB, waitB bool) {
 	done := make(chan struct{})
 	once := sync.Once{}
 	expectedErr := errors.New("expected error")
-	ctx := &testCtx{
+	tc := &testCtx{
 		c: done,
 	}
-	doneFn := func() {
+	var ctx context.Context = tc
+	ctx, cancel := context.WithCancel(ctx)
+	cancel = func() {
 		once.Do(func() {
-			ctx.e.Store(expectedErr)
+			tc.e.Store(expectedErr)
 			close(done)
+			cancel()
 		})
 	}
 	count := int32(0)
@@ -822,20 +825,23 @@ func testNewRunner4CtxCancel(t *testing.T, max int, addB, waitB bool) {
 		return nil
 	})
 	actualCount := int32(0)
+	wg := sync.WaitGroup{}
 	for i := int32(0); i < 1000; i++ {
+		wg.Add(1)
 		go func() {
 			n := rand.Int31n(100)
 			if n == flag {
-				doneFn()
+				cancel()
 			}
 			err := add(&data{n}, addB)
+			wg.Done()
 			atomic.AddInt32(&actualCount, n)
 			if err != nil && ctx.Err() != expectedErr {
 				t.Errorf("unexpected error: got %v, want %v", err, expectedErr)
 			}
 		}()
 	}
-	time.Sleep(time.Millisecond * 100)
+	wg.Wait()
 	err := wait(waitB)
 	if err != nil && ctx.Err() != expectedErr {
 		t.Errorf("unexpected error: want %v, got %v", expectedErr, err)

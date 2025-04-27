@@ -166,6 +166,8 @@ func RunSequentially(ctx context.Context, fn ...func(context.Context) error) err
 // 若 fn 为 nil 将触发 panic。
 //
 // 请注意在 add 完所有任务后再调用 wait，否则触发 panic 返回 ErrCallAddAfterWait。
+//
+// 调用了 add 后，请务必调用 wait，除非 add 返回了 err。
 func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) error) (
 	add func(t T, block bool) error, wait func(fastExit bool) error) {
 
@@ -195,9 +197,9 @@ func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) 
 	errSetFlag := make(chan struct{})           // err 是否设置信号。
 	errSetOnce := sync.Once{}                   // 设置 err 保护的函数。
 
-	// 设置 err，只有 fn 返回的 err 且非 ctx.Err() 才能设置进去。
+	// 设置 err。
 	setErrFn := func(fnErr error) {
-		if fnErr != nil && !errors.Is(fnErr, innerCtx.Err()) && !errors.Is(fnErr, ctx.Err()) {
+		if fnErr != nil {
 			errSetOnce.Do(func() {
 				aerr.Store(fnErr)
 				close(errSetFlag)
@@ -220,8 +222,8 @@ func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) 
 				fnErr = fmt.Errorf("panic: %v [recovered]\n%s", p, getStackCallers())
 			}
 			if fnErr != nil {
-				cancel() // 通知终止运行。
-				setErrFn(fnErr)
+				setErrFn(fnErr) // 先设置 err，再通知终止，避免 err 设置成 ctx.Err()。
+				cancel()        // 通知终止运行。
 			}
 			if limiter != nil && useLimiter {
 				<-limiter
@@ -248,6 +250,12 @@ func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) 
 
 		// 不阻塞添加任务。
 		if !block || limiter == nil {
+			select {
+			case <-innerCtx.Done(): // 任务已终止。
+				err, _ := aerr.Load().(error)
+				return err
+			default:
+			}
 			go func() {
 				useLimiter := false
 				if limiter != nil {
@@ -264,13 +272,13 @@ func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) 
 		select {
 		case <-innerCtx.Done(): // 任务已终止。
 			wg.Done() // 减少计数器。
-			return getErrFn()
+			err, _ := aerr.Load().(error)
+			return err
 		case limiter <- struct{}{}: // 获取限数器。
 			go fnWrapper(t, true)
+			err, _ := aerr.Load().(error)
+			return err
 		}
-
-		err, _ := aerr.Load().(error)
-		return err
 	}
 
 	waitOnce := sync.Once{}
