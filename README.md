@@ -9,63 +9,101 @@ go get gitee.com/ivfzhou/goroutine-util@latest
 ```
 
 ```golang
-// RunConcurrently 并发运行fn，一旦有error发生终止运行。
+// NewRunner 提供同时最多运行 max 个协程运行 fn，一旦 fn 发生错误或恐慌便终止运行。
+//
+// ctx：上下文，终止时，停止所有 fn 运行，并在调用 add 或 wait 时返回 ctx.Err()。
+//
+// max：表示最多 max 个协程运行 fn。小于等于零表示不限制协程数。
+//
+// fn：为要运行的函数。入参 T 由 add 函数提供。若 fn 发生错误或恐慌，将终止所有 fn 运行。恐慌将被恢复，并以错误形式返回，在调用 add 或 wait 时返回。
+//
+// add：为 fn 提供 T，每一个 T 只会被一个 fn 运行一次。block 为真时，当某一时刻运行 fn 数量达到 max 时，阻塞当前协程添加 T。反之，不阻塞当前协程。
+//
+// wait：阻塞当前协程，等待运行完毕。fastExit 为真时，运行发生错误时，立即返回该错误。反之，表示等待所有 fn 都终止后再返回。
+//
+// add 函数返回的错误不为空时，与 fn 返回的第一个错误一致，且与 wait 函数返回的错误为同一个。
+//
+// 注意：若 fn 为空，将触发恐慌。
+//
+// 注意：在 add 完所有 T 后再调用 wait，否则触发恐慌，返回 ErrCallAddAfterWait。
+//
+// 注意：调用了 add 后，请务必调用 wait，除非 add 返回了错误。
+func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) error) (add func(t T, block bool) error, wait func(fastExit bool) error)
+
+// RunData 将 jobs 传给 fn，并发运行 fn。若发生错误，就立刻终止运行。
+//
+// ctx：上下文。如果上下文终止了，则终止运行。
+//
+// fn：要运行处理 jobs 的函数。
+//
+// fastExit：发生错误就立刻返回，不等待所有协程全部退出。
+//
+// jobs：要处理的任务。
+//
+// 返回错误与 fn 返回的错误一致。
+//
+// 注意：fn 为空将触发恐慌。
+func RunData[T any](ctx context.Context, fn func(context.Context, T) error, fastExit bool, jobs ...T) error
+
+// RunPipeline 将每个 jobs 依次递给 steps 函数处理。一旦某个 step 发生错误或恐慌，就结束处理，返回错误。
+// 一个 job 最多在一个 step 中运行一次，且一个 job 一定是依次序递给 steps，前一个 step 处理完毕才会给下一个 step 处理。
+// 每个 step 并发运行 jobs。
+//
+// ctx：上下文，上下文终止时，将终止所有 steps 运行，并返回 ctx.Err()。
+//
+// stopWhenErr：当 step 发生错误时，是否继续处理 job，当为假时，只会停止将 job 往下一个 step 传递，不会终止运行。
+//
+// steps：处理 jobs 的函数。返回错误意味着终止运行。
+//
+// successCh：经所有 steps 处理成功 job 将从该通道发出。
+//
+// errCh：运行中的错误从该通道发出。
+//
+// 注意：若 steps 中含有空元素将会恐慌。
+func RunPipeline[T any](ctx context.Context, jobs []T, stopWhenErr bool, steps ...func(context.Context, T) error) (successCh <-chan T, errCh <-chan error)
+
+// NewPipelineRunner 创建流水线工作模型。
+//
+// ctx：上下文。当上下文终止时，将终止流水线运行，push 将返回假。
+//
+// steps：任务 T 依次在 steps 中运行。step 返回真表示将 T 传递给下一个 step 处理，否则不传递。
+//
+// push：向 step 中传递一个 T 处理，返回真表示添加成功。
+//
+// successCh：成功运行完所有 step 的 T 将从该通道发出。
+//
+// endPush：表示不再有 T 需要处理，push 将返回假。
+func NewPipelineRunner[T any](ctx context.Context, steps ...func(context.Context, T) bool) (push func(T) bool, successCh <-chan T, endPush func())
+
+// RunConcurrently 并发运行 fn，一旦有错误发生，终止运行。
+//
+// ctx：上下文，终止时，将导致 fn 终止运行，并在调用 wait 时返回 ctx.Err()。
+//
+// fn：要并发运行的函数。触发的恐慌将被恢复，并在调用 wait 时，以错误形式返回。
+//
+// wait：等待所有 fn 运行完毕。阻塞调用者协程，若 fastExit 为真，则一旦 fn 中发生了错误，立刻返回该错误。
+//
+// 注意：fn 是空将触发恐慌。
 func RunConcurrently(ctx context.Context, fn ...func(context.Context) error) (wait func(fastExit bool) error)
 
-// RunSequentially 依次运行fn，当有error发生时停止后续fn运行。
-func RunSequentially(ctx context.Context, fn ...func (context.Context) error) error
+// RunPeriodically 运行 fn，每个 fn 之间至少间隔 period 时间。前一个 fn 运行完毕到下一个 fn 开始运行之间的间隔时间。
+//
+// period：每个 fn 运行至少间隔时间。
+//
+// 注意：若 period 为负数将会触发恐慌。
+func RunPeriodically(period time.Duration) (run func(fn func()))
 
-// NewRunner 该函数提供同时最多运行 max 个协程运行 fn，一旦 fn 发生 error 或 panic 便终止运行。
+// RunSequentially 依次运行 fn，当有错误发生时停止后续 fn 运行。
 //
-// ctx 上下文，当 ctx canceled 将终止所有 fn 运行，并返回 ctx.Err()。
+// ctx：上下文，终止时，将导致后续 fn 不再运行，并返回 ctx.Err()。
 //
-// max 表示最多多少个协程运行 fn。小于等于 0 表示不限制协程数。
+// fn：要运行的函数，可以安全的添加空 fn。发生恐慌将被恢复，并以错误形式返回。
 //
-// fn 为要运行的函数。T 由 add 函数提供。若 fn 返回 error 或者 panic 则终止所有 fn 运行。fn panic 将被恢复，并以 error 形式返回。
-//
-// add 为 fn 提供 T。block 为 true 表示当某一时刻运行 fn 数量达到 max 时，阻塞当前协程添加 T。反之，不阻塞当前协程。
-//
-// wait 阻塞当前协程，等待运行完毕。fastExit 为 true 表示发生错误时，函数立即返回。反之，表示等待所有 fn 都终止后再返回。
-//
-// add 函数返回的 error 不为 nil 时，是为 fn 返回的第一个 error，且与 wait 函数返回的 error 为同一个。
-//
-// 若 fn 为 nil 将触发 panic。
-//
-// 请注意在 add 完所有任务后再调用 wait，否则触发 panic 返回 ErrCallAddAfterWait。
-func NewRunner[T any](ctx context.Context, max int, fn func (context.Context, T) error) (add func (t T, block bool) error, wait func (fastExit bool) error)
-
-// RunData 并发将jobs传递给fn函数运行，一旦发生error便立即返回该error，并结束其它协程。
-func RunData[T any](ctx context.Context, fn func (context.Context, T) error, fastExit bool, jobs ...T) error
-
-// RunPipeline 将每个jobs依次递给steps函数处理。一旦某个step发生error或者panic，立即返回该error，并及时结束其他协程。
-// 除非stopWhenErr为false，则只是终止该job往下一个step投递。
-//
-// 一个job最多在一个step中运行一次，且一个job一定是依次序递给steps，前一个step处理完毕才会给下一个step处理。
-//
-// 每个step并发运行jobs。
-//
-// 等待所有jobs处理结束时会close successCh、errCh，或者ctx被cancel时也将及时结束开启的goroutine后返回。
-//
-// 从successCh和errCh中获取成功跑完所有step的job和是否发生error。
-//
-// 若steps中含有nil将会panic。
-func RunPipeline[T any](ctx context.Context, jobs []T, stopWhenErr bool, steps ...func (context.Context, T) error) (successCh <-chan T, errCh <-chan error)
-
-// NewPipelineRunner 形同RunPipeline，不同在于使用push推送job。step返回true表示传递给下一个step处理。
-func NewPipelineRunner[T any](ctx context.Context, steps ...func (context.Context, T) bool) (push func (T) bool, successCh <-chan T, endPush func ())
-
-// ListenChan 监听chans，一旦有一个chan激活便立即将T发送给ch，并close ch。
-//
-// 若所有chans都未曾激活（chan是nil也认为未激活）且都close了，则ch被close。
-//
-// 若同时多个chans被激活，则随机将一个激活值发送给ch。
-func ListenChan[T any](chans ...<-chan T) (ch <-chan T)
-
-// RunPeriodically 依次运行fn，每个fn之间至少间隔period时间。
-func RunPeriodically(period time.Duration) (run func (fn func ()))
-
+// error：返回的错误与 fn 返回的错误一致。
+func RunSequentially(ctx context.Context, fn ...func(context.Context) error) error
 ```
 
 # 联系作者
 
-电邮：ifzhou@126.com
+电邮：ifzhou@126.com  
+微信：h899123
