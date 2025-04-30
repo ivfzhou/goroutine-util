@@ -10,4 +10,4 @@
 
 module gitee.com/ivfzhou/goroutine-util
 
-go 1.18
+go 1.24
