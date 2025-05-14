@@ -14,7 +14,10 @@ package goroutine_util
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"sync"
+	"sync/atomic"
 )
 
 // NewPipelineRunner 创建流水线工作模型。
@@ -35,64 +38,104 @@ func NewPipelineRunner[T any](ctx context.Context, steps ...func(context.Context
 	if len(steps) <= 0 {
 		ch := make(chan T)
 		close(ch)
-		return func(t T) bool { return false }, ch, func() {}
+		return func(T) bool { return false }, ch, func() {}
 	}
 
-	stepWrapper := func(ctx context.Context, f func(context.Context, T) bool, dataChan <-chan T) <-chan T {
-		ch := make(chan T, cap(dataChan))
+	userCtx := ctx
+	if ctx == nil {
+		ctx = context.Background()
+	} else {
+		select {
+		case <-ctx.Done():
+			ch := make(chan T)
+			close(ch)
+			return func(T) bool { return false }, ch, func() {}
+		default:
+		}
+	}
+
+	pushLock := sync.RWMutex{}           // 避免 push 和 endPush 同时调用，导致数据冲突。
+	endPushFlag := int32(0)              // 标识已经调用了 endPush。
+	pushChan := make(chan T, 1)          // 推送数据通道。
+	closePushChanWg := &sync.WaitGroup{} // 等待所有数据都推送进队列。
+
+	endPush = func() {
+		pushLock.Lock()
+		defer pushLock.Unlock()
+		if atomic.CompareAndSwapInt32(&endPushFlag, 0, 1) {
+			go func() {
+				closePushChanWg.Wait()
+				close(pushChan)
+			}()
+		}
+	}
+
+	push = func(t T) bool {
+		pushLock.RLock()
+		defer pushLock.RUnlock()
+		if atomic.LoadInt32(&endPushFlag) > 0 {
+			return false
+		}
+
+		select {
+		case pushChan <- t:
+			return true
+		default:
+		}
+
+		closePushChanWg.Add(1)
+		go func() {
+			defer closePushChanWg.Done()
+			pushChan <- t
+		}()
+
+		return true
+	}
+
+	stepWrapperFn := func(ctx context.Context, job T, step func(context.Context, T) bool) (b bool) {
+		defer func() {
+			if p := recover(); p != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "%v", wrapperPanic(p))
+				b = false
+			}
+		}()
+		b = step(ctx, job)
+		return
+	}
+
+	startStep := func(step func(context.Context, T) bool, receiveChan <-chan T) chan T { // 开启一个 step 协程。
+		sendChan := make(chan T, 1)
 
 		go func() {
 			wg := &sync.WaitGroup{}
 			defer func() {
 				wg.Wait()
-				close(ch)
+				close(sendChan)
 			}()
 
-			if ctx == nil {
-				for t := range dataChan {
-					wg.Add(1)
-					go func(t T) {
-						defer wg.Done()
-						if f(ctx, t) {
-							ch <- t
-						}
-					}(t)
-				}
-				return
-			}
-
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case t, ok := <-dataChan:
-					if !ok {
+			for v := range receiveChan {
+				wg.Add(1)
+				go func(job T) {
+					defer wg.Done()
+					if !stepWrapperFn(userCtx, job, step) {
 						return
 					}
-					wg.Add(1)
-					go func(t T) {
-						defer wg.Done()
-						select {
-						case <-ctx.Done():
-							return
-						default:
-						}
-						if f(ctx, t) {
-							ch <- t
-						}
-					}(t)
-				}
+					select {
+					case <-ctx.Done():
+					case sendChan <- job:
+					}
+				}(v)
 			}
 		}()
 
-		return ch
+		return sendChan
 	}
 
-	jobQueue := &Queue[T]{}
-	nextCh := jobQueue.GetFromChan()
+	// 开启所有 step 协程。
+	var nextChan = pushChan
 	for i := range steps {
-		nextCh = stepWrapper(ctx, steps[i], nextCh)
+		nextChan = startStep(steps[i], nextChan)
 	}
 
-	return jobQueue.Push, nextCh, jobQueue.Close
+	return push, nextChan, endPush
 }

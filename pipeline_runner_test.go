@@ -14,6 +14,7 @@ package goroutine_util_test
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"testing"
 
@@ -51,19 +52,20 @@ func TestNewPipelineRunner(t *testing.T) {
 				i int
 				x int
 			}
-			const count = 1000
-			jobs := make([]*job, count)
-			expectedResult := make(map[int]int, count)
+			const jobCount = 1000
+			const workCount = 3
+			jobs := make([]*job, jobCount)
+			expectedResult := make(map[int]int, jobCount)
 			for i := range jobs {
-				jobs[i] = &job{x: rand.Intn(100), i: i}
-				expectedResult[i] = jobs[i].x + 3
+				jobs[i] = &job{x: rand.Intn(1000), i: i}
+				expectedResult[i] = jobs[i].x + workCount
 			}
 
-			ctx := context.Background()
-			worker1 := func(ctx context.Context, j *job) bool { j.x++; return true }
-			worker2 := func(ctx context.Context, j *job) bool { j.x++; return true }
-			worker3 := func(ctx context.Context, j *job) bool { j.x++; return true }
-			push, successCh, endPush := gu.NewPipelineRunner(ctx, worker1, worker2, worker3)
+			works := make([]func(context.Context, *job) bool, workCount)
+			for i := range works {
+				works[i] = func(ctx context.Context, j *job) bool { j.x++; return true }
+			}
+			push, successCh, endPush := gu.NewPipelineRunner(context.Background(), works...)
 
 			go func() {
 				for i := range jobs {
@@ -89,39 +91,29 @@ func TestNewPipelineRunner(t *testing.T) {
 				i int
 				x int
 			}
-			const count = 1000
-			jobs := make([]*job, count)
-			expectedResult := make(map[int]int, count)
-			dropIndex := rand.Intn(count / 2)
+			const jobCount = 1000
+			const workCount = 3
+			jobs := make([]*job, jobCount)
+			expectedResult := make(map[int]int, jobCount)
+			dropIndex := rand.Intn(jobCount / 2)
 			for i := range jobs {
 				jobs[i] = &job{x: rand.Intn(100), i: i}
-				expectedResult[i] = jobs[i].x + 3
+				expectedResult[i] = jobs[i].x + workCount
 			}
 
-			ctx := context.Background()
-			index := rand.Intn(3)
-			worker1 := func(ctx context.Context, j *job) bool {
-				if j.i == dropIndex && index == 0 {
-					return false
+			index := rand.Intn(workCount)
+			works := make([]func(context.Context, *job) bool, workCount)
+			for i := range works {
+				workIndex := i
+				works[i] = func(ctx context.Context, j *job) bool {
+					if j.i == dropIndex && index == workIndex {
+						return false
+					}
+					j.x++
+					return true
 				}
-				j.x++
-				return true
 			}
-			worker2 := func(ctx context.Context, j *job) bool {
-				if j.i == dropIndex && index == 1 {
-					return false
-				}
-				j.x++
-				return true
-			}
-			worker3 := func(ctx context.Context, j *job) bool {
-				if j.i == dropIndex && index == 2 {
-					return false
-				}
-				j.x++
-				return true
-			}
-			push, successCh, endPush := gu.NewPipelineRunner(ctx, worker1, worker2, worker3)
+			push, successCh, endPush := gu.NewPipelineRunner(context.Background(), works...)
 
 			go func() {
 				for i := range jobs {
@@ -136,12 +128,185 @@ func TestNewPipelineRunner(t *testing.T) {
 			for v := range successCh {
 				if dropIndex == v.i {
 					if expectedResult[v.i] <= v.x {
-						t.Errorf("unexpected result: want %v, got %v", expectedResult[v.i], v.x)
+						t.Errorf("unexpected result: want < %v, got %v", expectedResult[v.i], v.x)
 					}
 				} else {
 					if expectedResult[v.i] != v.x {
 						t.Errorf("unexpected result: want %v, got %v", expectedResult[v.i], v.x)
 					}
+				}
+			}
+		}
+	})
+
+	t.Run("上下文终止", func(t *testing.T) {
+		for i := 0; i < 100; i++ {
+			type job struct {
+				i int
+				x int
+			}
+			const jobCount = 1000
+			const workCount = 3
+			ctx, cancel := newCtxCancelWithError()
+			expectedErr := errors.New("expected error")
+			jobs := make([]*job, jobCount)
+			expectedResult := make(map[int]int, jobCount)
+			cancelIndex := rand.Intn(jobCount / 2)
+			for i := range jobs {
+				jobs[i] = &job{x: rand.Intn(100), i: i}
+				expectedResult[i] = jobs[i].x + workCount
+			}
+
+			index := rand.Intn(workCount)
+			works := make([]func(context.Context, *job) bool, workCount)
+			for i := range works {
+				workIndex := i
+				works[i] = func(ctx context.Context, j *job) bool {
+					if j.i == cancelIndex && index == workIndex {
+						cancel(expectedErr)
+					}
+					j.x++
+					return true
+				}
+			}
+			push, successCh, endPush := gu.NewPipelineRunner(ctx, works...)
+
+			go func() {
+				for i := range jobs {
+					b := push(jobs[i])
+					if !b {
+						break
+					}
+				}
+				endPush()
+			}()
+
+			for v := range successCh {
+				if cancelIndex == v.i {
+					if expectedResult[v.i] < v.x {
+						t.Errorf("unexpected result: want <= %v, got %v", expectedResult[v.i], v.x)
+					}
+				} else {
+					if expectedResult[v.i] != v.x {
+						t.Errorf("unexpected result: want %v, got %v", expectedResult[v.i], v.x)
+					}
+				}
+			}
+		}
+	})
+
+	t.Run("大量任务", func(t *testing.T) {
+		for i := 0; i < 1; i++ {
+			type job struct {
+				i int
+				x int
+			}
+			var jobCount = 1024*1024*(rand.Intn(5)+1) + 10
+			var workCount = 5
+			jobs := make([]*job, jobCount)
+			expectedResult := make(map[int]int, jobCount)
+			for i := range jobs {
+				jobs[i] = &job{x: rand.Intn(100), i: i}
+				expectedResult[i] = jobs[i].x + workCount
+			}
+
+			works := make([]func(context.Context, *job) bool, workCount)
+			for i := range works {
+				works[i] = func(ctx context.Context, j *job) bool { j.x++; return true }
+			}
+			push, successCh, endPush := gu.NewPipelineRunner(context.Background(), works...)
+
+			go func() {
+				for i := range jobs {
+					b := push(jobs[i])
+					if !b {
+						t.Errorf("unexpected result: want true, got %v", b)
+					}
+				}
+				endPush()
+			}()
+
+			for v := range successCh {
+				if expectedResult[v.i] != v.x {
+					t.Errorf("unexpected result: want %v, got %v", expectedResult[v.i], v.x)
+				}
+			}
+		}
+	})
+
+	t.Run("大量步骤", func(t *testing.T) {
+		for i := 0; i < 1; i++ {
+			type job struct {
+				i int
+				x int
+			}
+			var jobCount = 10
+			var workCount = 500000
+			jobs := make([]*job, jobCount)
+			expectedResult := make(map[int]int, jobCount)
+			for i := range jobs {
+				jobs[i] = &job{x: rand.Intn(100), i: i}
+				expectedResult[i] = jobs[i].x + workCount
+			}
+
+			works := make([]func(context.Context, *job) bool, workCount)
+			for i := range works {
+				works[i] = func(ctx context.Context, j *job) bool { j.x++; return true }
+			}
+			push, successCh, endPush := gu.NewPipelineRunner(context.Background(), works...)
+
+			go func() {
+				for i := range jobs {
+					b := push(jobs[i])
+					if !b {
+						t.Errorf("unexpected result: want true, got %v", b)
+					}
+				}
+				endPush()
+			}()
+
+			for v := range successCh {
+				if expectedResult[v.i] != v.x {
+					t.Errorf("unexpected result: want %v, got %v", expectedResult[v.i], v.x)
+				}
+			}
+		}
+	})
+
+	t.Run("大量任务和步骤", func(t *testing.T) {
+		for i := 0; i < 1; i++ {
+			type job struct {
+				i int
+				x int
+			}
+			var jobCount = 1024*100*(rand.Intn(5)+1) + 10
+			var workCount = 100
+			jobs := make([]*job, jobCount)
+			expectedResult := make(map[int]int, jobCount)
+			for i := range jobs {
+				jobs[i] = &job{x: rand.Intn(100), i: i}
+				expectedResult[i] = jobs[i].x + workCount
+			}
+
+			works := make([]func(context.Context, *job) bool, workCount)
+			for i := range works {
+				works[i] = func(ctx context.Context, j *job) bool { j.x++; return true }
+			}
+			push, successCh, endPush := gu.NewPipelineRunner(context.Background(), works...)
+
+			go func() {
+				for i := range jobs {
+					b := push(jobs[i])
+					if !b {
+						t.Errorf("unexpected result: want true, got %v", b)
+					}
+				}
+				endPush()
+			}()
+
+			for v := range successCh {
+				if expectedResult[v.i] != v.x {
+					t.Errorf("unexpected result: want %v, got %v", expectedResult[v.i], v.x)
 				}
 			}
 		}

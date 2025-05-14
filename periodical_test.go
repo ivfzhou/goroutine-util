@@ -14,6 +14,7 @@ package goroutine_util_test
 
 import (
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,29 +22,84 @@ import (
 )
 
 func TestRunPeriodically(t *testing.T) {
-	for i := 0; i < 50; i++ {
-		period := time.Millisecond * time.Duration(rand.Intn(1000)+100)
-		run := gu.RunPeriodically(period)
-		var now time.Time
+	t.Run("正常运行", func(t *testing.T) {
+		for i := 0; i < 20; i++ {
+			period := time.Millisecond * time.Duration(rand.Intn(100)+100)
+			run := gu.RunPeriodically(period)
+			var now time.Time
 
-		run(func() { now = time.Now() })
+			wg := sync.WaitGroup{}
+			wg.Add(3)
+			run(func() { now = time.Now() })
+			go run(func() {
+				defer wg.Done()
+				if time.Since(now) < period {
+					t.Errorf("unexpected time: %v", now)
+				}
+				now = time.Now()
+			})
+			go run(func() {
+				defer wg.Done()
+				if time.Since(now) < period {
+					t.Errorf("unexpected time: %v", now)
+				}
+				now = time.Now()
+			})
+			go run(func() {
+				defer wg.Done()
+				if time.Since(now) < period {
+					t.Errorf("unexpected time: %v", now)
+				}
+				now = time.Now()
+			})
+			wg.Wait()
+		}
+	})
 
-		run(func() {
-			if time.Since(now) < period {
-				t.Errorf("unexpected time: %v", now)
-			}
-		})
+	t.Run("发生恐慌", func(t *testing.T) {
+		for i := 0; i < 20; i++ {
+			period := time.Millisecond * time.Duration(rand.Intn(100)+100)
+			run := gu.RunPeriodically(period)
+			var now time.Time
+			occurPanicIndex := rand.Intn(3)
 
-		run(func() {
-			if time.Since(now) < 2*period {
-				t.Errorf("unexpected time: %v", now)
-			}
-		})
-
-		run(func() {
-			if time.Since(now) < 3*period {
-				t.Errorf("unexpected time: %v", now)
-			}
-		})
-	}
+			wg := sync.WaitGroup{}
+			wg.Add(3)
+			run(func() { now = time.Now() })
+			go run(func() {
+				defer wg.Done()
+				defer func() { recover() }()
+				if time.Since(now) < period {
+					t.Errorf("unexpected time: %v", now)
+				}
+				now = time.Now()
+				if occurPanicIndex == 0 {
+					panic("")
+				}
+			})
+			go run(func() {
+				defer wg.Done()
+				defer func() { recover() }()
+				if time.Since(now) < period {
+					t.Errorf("unexpected time: %v", now)
+				}
+				now = time.Now()
+				if occurPanicIndex == 1 {
+					panic("")
+				}
+			})
+			go run(func() {
+				defer wg.Done()
+				defer func() { recover() }()
+				if time.Since(now) < period {
+					t.Errorf("unexpected time: %v", now)
+				}
+				now = time.Now()
+				if occurPanicIndex == 2 {
+					panic("")
+				}
+			})
+			wg.Wait()
+		}
+	})
 }

@@ -33,11 +33,24 @@ func ExampleRunPipeline() {
 	work2 := func(ctx context.Context, d *data) error { return nil }
 
 	successCh, errCh := gu.RunPipeline(ctx, jobs, false, work1, work2)
-	select {
-	case <-successCh:
-		// 处理成功的 job。
-	case <-errCh:
-		// 处理错误。
+	for {
+		if successCh == nil && errCh == nil {
+			break
+		}
+		select {
+		case _, ok := <-successCh:
+			if !ok {
+				successCh = nil
+				continue
+			}
+			// 处理成功的 jobPtr。
+		case _, ok := <-errCh:
+			if !ok {
+				errCh = nil
+				continue
+			}
+			// 处理错误。
+		}
 	}
 }
 
@@ -47,8 +60,7 @@ func TestRunPipeline(t *testing.T) {
 			type job struct {
 				x int
 			}
-			ctx := context.Background()
-			jobCount := rand.Intn(91) + 10
+			jobCount := 100
 			expectedResult := make([]int, jobCount)
 			jobs := make([]*job, jobCount)
 			for i := 0; i < jobCount; i++ {
@@ -58,23 +70,36 @@ func TestRunPipeline(t *testing.T) {
 			}
 			sort.Ints(expectedResult)
 
-			step1 := func(_ context.Context, j *job) error { time.Sleep(time.Millisecond * 100); j.x++; return nil }
-			step2 := func(_ context.Context, j *job) error { time.Sleep(time.Millisecond * 100); j.x++; return nil }
-			step3 := func(_ context.Context, j *job) error { time.Sleep(time.Millisecond * 100); j.x++; return nil }
-			stopWhenErr := rand.Intn(2) == 1
-			successCh, errCh := gu.RunPipeline(ctx, jobs, stopWhenErr, step1, step2, step3)
+			step1 := func(_ context.Context, j *job) error { j.x++; return nil }
+			step2 := func(_ context.Context, j *job) error { j.x++; return nil }
+			step3 := func(_ context.Context, j *job) error { j.x++; return nil }
+			successCh, errCh := gu.RunPipeline(context.Background(), jobs, rand.Intn(2) == 1, step1, step2, step3)
 
 			result := make([]int, 0, jobCount)
-			for v := range successCh {
-				result = append(result, v.x)
+
+			for {
+				if successCh == nil && errCh == nil {
+					break
+				}
+				select {
+				case err, ok := <-errCh:
+					if !ok {
+						errCh = nil
+						continue
+					}
+					t.Errorf("unexpected error: want false, got %v, value is %v", ok, err)
+				case v, ok := <-successCh:
+					if !ok {
+						successCh = nil
+						continue
+					}
+					result = append(result, v.x)
+				}
 			}
-			err, ok := <-errCh
-			if ok {
-				t.Errorf("unexpected error: want false, got %v, value is %v", ok, err)
-			}
+
 			sort.Ints(result)
 			if !reflect.DeepEqual(result, expectedResult) {
-				t.Errorf("unexpected result: want %d, got %d", len(expectedResult), len(result))
+				t.Errorf("unexpected result: want %v, got %v", len(expectedResult), len(result))
 			}
 		}
 	})
@@ -82,77 +107,81 @@ func TestRunPipeline(t *testing.T) {
 	t.Run("发生错误", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			type job struct {
-				i   int
-				x   int
-				err error
+				i int
+				x int
 			}
-			ctx := context.Background()
-			jobCount := rand.Intn(91) + 10
+			jobCount := rand.Intn(91) + 90
 			expectedErr := errors.New("expected error")
-			occurErrorIndex := rand.Intn(jobCount / 2)
 			expectedResult := make(map[int]int, jobCount)
 			jobs := make([]*job, jobCount)
 			for i := 0; i < jobCount; i++ {
 				v := rand.Intn(jobCount)
 				jobs[i] = &job{i: i, x: v}
-				if occurErrorIndex == i {
-					jobs[i].err = expectedErr
-				}
 				expectedResult[i] = v + 3
 			}
 
 			returnErrorIndex := rand.Intn(3)
+			occurErrorIndex := rand.Intn(jobCount / 2)
 			step1 := func(_ context.Context, j *job) error {
-				time.Sleep(time.Millisecond * 100)
-				j.x++
-				if returnErrorIndex == 0 {
-					return j.err
+				if j.i == occurErrorIndex && returnErrorIndex == 0 {
+					return expectedErr
 				}
+				j.x++
 				return nil
 			}
 			step2 := func(_ context.Context, j *job) error {
-				time.Sleep(time.Millisecond * 100)
-				j.x++
-				if returnErrorIndex == 1 {
-					return j.err
+				if j.i == occurErrorIndex && returnErrorIndex == 1 {
+					return expectedErr
 				}
+				j.x++
 				return nil
 			}
 			step3 := func(_ context.Context, j *job) error {
-				time.Sleep(time.Millisecond * 100)
-				j.x++
-				if returnErrorIndex == 2 {
-					return j.err
+				if j.i == occurErrorIndex && returnErrorIndex == 2 {
+					return expectedErr
 				}
+				j.x++
 				return nil
 			}
 			stopWhenErr := rand.Intn(2) == 1
-			successCh, errCh := gu.RunPipeline(ctx, jobs, stopWhenErr, step1, step2, step3)
+			successCh, errCh := gu.RunPipeline(context.Background(), jobs, stopWhenErr, step1, step2, step3)
 
 			result := make([]*job, 0, jobCount)
-			for v := range successCh {
-				result = append(result, v)
+			for {
+				if successCh == nil && errCh == nil {
+					break
+				}
+				select {
+				case v, ok := <-successCh:
+					if !ok {
+						successCh = nil
+						continue
+					}
+					result = append(result, v)
+				case err, ok := <-errCh:
+					if !ok {
+						errCh = nil
+						continue
+					}
+					if !errors.Is(err, expectedErr) {
+						t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
+					}
+				}
 			}
-			err, ok := <-errCh
-			if !ok {
-				t.Errorf("unexpected error: want true, got %v, value is %v", ok, err)
-			}
-			if !errors.Is(err, expectedErr) {
-				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
-			}
+
 			if stopWhenErr {
 				for _, v := range result {
-					if expectedResult[v.i] < v.x {
-						t.Errorf("unexpected result: want %d, got %d", expectedResult[v.i], v.x)
+					if expectedResult[v.i] != v.x {
+						t.Errorf("unexpected result: want %v, got %v", expectedResult[v.i], v.x)
 					}
 				}
 			} else {
 				if len(result) != len(expectedResult)-1 {
-					t.Errorf("unexpected result: want %d, got %d", len(expectedResult)-1, len(result))
+					t.Errorf("unexpected result: want %v, got %v", len(expectedResult)-1, len(result))
 				}
 				for _, v := range result {
 					if expectedResult[v.i] != v.x {
-						t.Errorf("unexpected result: want %d, got %d", expectedResult[v.i], v.x)
+						t.Errorf("unexpected result: want %v, got %v", expectedResult[v.i], v.x)
 					}
 				}
 			}
@@ -162,77 +191,84 @@ func TestRunPipeline(t *testing.T) {
 	t.Run("发生恐慌", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			type job struct {
-				i   int
-				x   int
-				err error
+				i int
+				x int
 			}
-			ctx := context.Background()
 			jobCount := rand.Intn(91) + 10
 			expectedErr := errors.New("expected error")
-			occurPanicIndex := rand.Intn(jobCount / 2)
 			expectedResult := make(map[int]int, jobCount)
 			jobs := make([]*job, jobCount)
 			for i := 0; i < jobCount; i++ {
 				v := rand.Intn(jobCount)
 				jobs[i] = &job{i: i, x: v}
-				if occurPanicIndex == i {
-					jobs[i].err = expectedErr
-				}
 				expectedResult[i] = v + 3
 			}
 
 			panicIndex := rand.Intn(3)
+			occurPanicIndex := rand.Intn(jobCount / 2)
 			step1 := func(_ context.Context, j *job) error {
-				time.Sleep(time.Millisecond * 100)
-				j.x++
-				if panicIndex == 0 && j.err != nil {
-					panic(j.err)
+				time.Sleep(time.Millisecond * 10)
+				if j.i == occurPanicIndex && panicIndex == 0 {
+					panic(expectedErr)
 				}
+				j.x++
 				return nil
 			}
 			step2 := func(_ context.Context, j *job) error {
-				time.Sleep(time.Millisecond * 100)
-				j.x++
-				if panicIndex == 1 && j.err != nil {
-					panic(j.err)
+				time.Sleep(time.Millisecond * 10)
+				if j.i == occurPanicIndex && panicIndex == 1 {
+					panic(expectedErr)
 				}
+				j.x++
 				return nil
 			}
 			step3 := func(_ context.Context, j *job) error {
-				time.Sleep(time.Millisecond * 100)
-				j.x++
-				if panicIndex == 2 && j.err != nil {
-					panic(j.err)
+				time.Sleep(time.Millisecond * 10)
+				if j.i == occurPanicIndex && panicIndex == 2 {
+					panic(expectedErr)
 				}
+				j.x++
 				return nil
 			}
 			stopWhenErr := rand.Intn(2) == 1
-			successCh, errCh := gu.RunPipeline(ctx, jobs, stopWhenErr, step1, step2, step3)
+			successCh, errCh := gu.RunPipeline(context.Background(), jobs, stopWhenErr, step1, step2, step3)
 
 			result := make([]*job, 0, jobCount)
-			for v := range successCh {
-				result = append(result, v)
+			for {
+				if errCh == nil && successCh == nil {
+					break
+				}
+				select {
+				case v, ok := <-successCh:
+					if !ok {
+						successCh = nil
+						continue
+					}
+					result = append(result, v)
+				case err, ok := <-errCh:
+					if !ok {
+						errCh = nil
+						continue
+					}
+					if !errors.Is(err, expectedErr) {
+						t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
+					}
+				}
 			}
-			err, ok := <-errCh
-			if !ok {
-				t.Errorf("unexpected error: want true, got %v, value is %v", ok, err)
-			}
-			if !errors.Is(err, expectedErr) {
-				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
-			}
+
 			if stopWhenErr {
 				for _, v := range result {
-					if expectedResult[v.i] < v.x {
+					if expectedResult[v.i] != v.x {
 						t.Errorf("unexpected result: want %d, got %d", expectedResult[v.i], v.x)
 					}
 				}
 			} else {
 				if len(result) != len(expectedResult)-1 {
-					t.Errorf("unexpected result: want %d, got %d", len(expectedResult)-1, len(result))
+					t.Errorf("unexpected result: want %v, got %v", len(expectedResult)-1, len(result))
 				}
 				for _, v := range result {
 					if expectedResult[v.i] != v.x {
-						t.Errorf("unexpected result: want %d, got %d", expectedResult[v.i], v.x)
+						t.Errorf("unexpected result: want %v, got %v", expectedResult[v.i], v.x)
 					}
 				}
 			}
@@ -242,188 +278,126 @@ func TestRunPipeline(t *testing.T) {
 	t.Run("上下文终止", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			type job struct {
-				i   int
-				x   int
-				err error
+				i int
+				x int
 			}
 			ctx, cancel := newCtxCancelWithError()
 			jobCount := rand.Intn(91) + 10
 			expectedErr := errors.New("expected error")
-			occurCancelIndex := rand.Intn(jobCount / 2)
 			expectedResult := make(map[int]int, jobCount)
 			jobs := make([]*job, jobCount)
 			for i := 0; i < jobCount; i++ {
 				v := rand.Intn(jobCount)
 				jobs[i] = &job{i: i, x: v}
-				if occurCancelIndex == i {
-					jobs[i].err = expectedErr
-				}
 				expectedResult[i] = v + 3
 			}
 
 			cancelIndex := rand.Intn(3)
+			occurCancelIndex := rand.Intn(jobCount / 2)
 			step1 := func(_ context.Context, j *job) error {
-				time.Sleep(time.Millisecond * 100)
-				j.x++
-				if cancelIndex == 0 && j.err != nil {
-					cancel(j.err)
+				time.Sleep(time.Millisecond * 10)
+				if j.i == occurCancelIndex && cancelIndex == 0 {
+					cancel(expectedErr)
 				}
+				j.x++
 				return nil
 			}
 			step2 := func(_ context.Context, j *job) error {
-				time.Sleep(time.Millisecond * 100)
-				j.x++
-				if cancelIndex == 1 && j.err != nil {
-					cancel(j.err)
+				time.Sleep(time.Millisecond * 10)
+				if j.i == occurCancelIndex && cancelIndex == 1 {
+					cancel(expectedErr)
 				}
+				j.x++
 				return nil
 			}
 			step3 := func(_ context.Context, j *job) error {
-				time.Sleep(time.Millisecond * 100)
-				j.x++
-				if cancelIndex == 2 && j.err != nil {
-					cancel(j.err)
+				time.Sleep(time.Millisecond * 10)
+				if j.i == occurCancelIndex && cancelIndex == 2 {
+					cancel(expectedErr)
 				}
+				j.x++
 				return nil
 			}
 			stopWhenErr := rand.Intn(2) == 1
 			successCh, errCh := gu.RunPipeline(ctx, jobs, stopWhenErr, step1, step2, step3)
 
 			result := make([]*job, 0, jobCount)
-			for v := range successCh {
-				result = append(result, v)
+			hasErr := false
+			for {
+				if successCh == nil && errCh == nil {
+					break
+				}
+				select {
+				case v, ok := <-successCh:
+					if !ok {
+						successCh = nil
+						continue
+					}
+					result = append(result, v)
+				case err, ok := <-errCh:
+					if !ok {
+						errCh = nil
+						continue
+					}
+					hasErr = true
+					if !errors.Is(err, expectedErr) {
+						t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
+					}
+				}
 			}
-			err, ok := <-errCh
-			if ok && !errors.Is(err, expectedErr) {
-				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
-			}
-			if !ok && len(result) != len(expectedResult) || ok && len(result) >= len(expectedResult) {
-				t.Errorf("unexpected result: want %d, got %d,value is %v", len(expectedResult), len(result), ok)
-			}
-			for _, v := range result {
-				if expectedResult[v.i] < v.x {
-					t.Errorf("unexpected result: want %d, got %d", expectedResult[v.i], v.x)
+
+			if !hasErr {
+				if len(result) != len(expectedResult) {
+					t.Errorf("unexpected result: want %v, got %v", len(expectedResult), len(result))
+				}
+				for _, v := range result {
+					if expectedResult[v.i] != v.x {
+						t.Errorf("unexpected result: want %v, got %v", expectedResult[v.i], v.x)
+					}
+				}
+			} else {
+				for _, v := range result {
+					if expectedResult[v.i] < v.x {
+						t.Errorf("unexpected result: want >= %v, got %v", expectedResult[v.i], v.x)
+					}
 				}
 			}
 		}
 	})
-}
 
-func TestListenChan(t *testing.T) {
-	t.Run("正常运行", func(t *testing.T) {
+	t.Run("大量数据", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
-			err1 := make(chan error)
-			err2 := make(chan error)
-			err3 := make(chan error)
-			errChans := []<-chan error{
-				err1,
-				err2,
-				err3,
+			type job struct {
+				x int
+			}
+			jobCount := 1024*10*(rand.Intn(5)+1) + 10
+			stepCount := 50
+			expectedResult := make([]int, jobCount)
+			jobs := make([]*job, jobCount)
+			for i := 0; i < jobCount; i++ {
+				v := rand.Intn(jobCount)
+				jobs[i] = &job{x: v}
+				expectedResult[i] = v + stepCount
+			}
+			sort.Ints(expectedResult)
+
+			steps := make([]func(context.Context, *job) error, stepCount)
+			for i := range steps {
+				steps[i] = func(_ context.Context, j *job) error { j.x++; return nil }
+			}
+			successCh, errCh := gu.RunPipeline(context.Background(), jobs, rand.Intn(2) == 1, steps...)
+
+			result := make([]int, 0, jobCount)
+			for v := range successCh {
+				result = append(result, v.x)
+			}
+			sort.Ints(result)
+			if !reflect.DeepEqual(result, expectedResult) {
+				t.Errorf("unexpected result: want %v, got %v", len(expectedResult), len(result))
 			}
 
-			expectedErr := errors.New("expected error")
-			go func() {
-				time.Sleep(time.Second)
-				err1 <- expectedErr
-				close(err1)
-				close(err2)
-				close(err3)
-			}()
-			ch := gu.ListenChan(errChans...)
-			if err := <-ch; !errors.Is(err, expectedErr) {
-				t.Errorf("unexpected result: want %v, got %v", expectedErr, err)
-			}
-			err, ok := <-ch
-			if ok {
-				t.Errorf("unexpected result: want false, got %v, value is %v", ok, err)
-			}
-		}
-	})
-
-	t.Run("通道都关闭未发送值", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
-			err1 := make(chan error)
-			err2 := make(chan error)
-			err3 := make(chan error)
-			errChans := []<-chan error{
-				err1,
-				err2,
-				err3,
-			}
-
-			go func() {
-				time.Sleep(time.Second)
-				close(err1)
-				close(err2)
-				close(err3)
-			}()
-			ch := gu.ListenChan(errChans...)
-			if err := <-ch; err != nil {
-				t.Errorf("unexpected result: want nil, got %v", err)
-			}
-			err, ok := <-ch
-			if ok {
-				t.Errorf("unexpected result: want false, got %v, value is %v", ok, err)
-			}
-		}
-	})
-
-	t.Run("包含空通道", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
-			err1 := make(chan error)
-			err2 := make(chan error)
-			err3 := make(chan error)
-			errChans := []<-chan error{
-				err1,
-				err2,
-				nil,
-				err3,
-			}
-
-			go func() {
-				time.Sleep(time.Second)
-				close(err1)
-				close(err2)
-				close(err3)
-			}()
-			ch := gu.ListenChan(errChans...)
-			if err := <-ch; err != nil {
-				t.Errorf("unexpected result: want nil, got %v", err)
-			}
-			err, ok := <-ch
-			if ok {
-				t.Errorf("unexpected result: want false, got %v, value is %v", ok, err)
-			}
-		}
-	})
-
-	t.Run("多个通道发送了值", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
-			err1 := make(chan error)
-			err2 := make(chan error)
-			err3 := make(chan error)
-			errChans := []<-chan error{
-				err1,
-				err2,
-				err3,
-			}
-
-			expectedErr := errors.New("expected error")
-			go func() {
-				time.Sleep(time.Second)
-				err1 <- expectedErr
-				err2 <- expectedErr
-				close(err1)
-				close(err2)
-				close(err3)
-			}()
-			ch := gu.ListenChan(errChans...)
-			if err := <-ch; !errors.Is(err, expectedErr) {
-				t.Errorf("unexpected result: want %v, got %v", expectedErr, err)
-			}
-			err, ok := <-ch
-			if ok {
-				t.Errorf("unexpected result: want false, got %v, value is %v", ok, err)
+			if err, ok := <-errCh; ok {
+				t.Errorf("unexpected error: want false, got %v, value is %v", ok, err)
 			}
 		}
 	})

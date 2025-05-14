@@ -20,15 +20,21 @@ import "time"
 //
 // 注意：若 period 为负数将会触发恐慌。
 func RunPeriodically(period time.Duration) (run func(fn func())) {
-	if period <= 0 {
+	if period < 0 {
 		panic("period must be positive")
 	}
 
+	locker := make(chan struct{}, 1)
 	lastAccess := time.Time{}
+
 	run = func(fn func()) {
+		locker <- struct{}{}
+		defer func() {
+			lastAccess = time.Now()
+			<-locker
+		}()
 		time.Sleep(period - time.Since(lastAccess))
 		fn()
-		lastAccess = time.Now()
 	}
 
 	return

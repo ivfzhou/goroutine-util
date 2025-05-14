@@ -14,15 +14,8 @@ package goroutine_util
 
 import (
 	"context"
-	"fmt"
 	"sync"
-	"sync/atomic"
 )
-
-// AtomicError 原子性读取和设置错误信息。
-type AtomicError struct {
-	err atomic.Value
-}
 
 // RunConcurrently 并发运行 fn，一旦有错误发生，终止运行。
 //
@@ -40,13 +33,11 @@ func RunConcurrently(ctx context.Context, fn ...func(context.Context) error) (wa
 	}
 
 	nilCtx := false
+	userCtx := ctx
 	if ctx == nil {
 		nilCtx = true
 		ctx = context.Background()
-	}
-
-	// 上下文已终止，返回函数。
-	if !nilCtx {
+	} else { // 上下文已终止，返回函数。
 		select {
 		case <-ctx.Done():
 			err := ctx.Err()
@@ -65,7 +56,8 @@ func RunConcurrently(ctx context.Context, fn ...func(context.Context) error) (wa
 		if f == nil {
 			panic("fn cannot be nil")
 		}
-		go func(f func(context.Context) error) {
+
+		go func() {
 			var fnErr error
 			defer func() {
 				if p := recover(); p != nil {
@@ -79,15 +71,17 @@ func RunConcurrently(ctx context.Context, fn ...func(context.Context) error) (wa
 			}()
 			select {
 			case <-innerCtx.Done(): // 发生了错误，任务终止了，或者是顶层上下文终止了。
-				err.Set(ctx.Err()) // 顶层上下文终止。
-			default:
-				if nilCtx {
-					fnErr = f(nil)
-				} else {
-					fnErr = f(ctx)
+				if !nilCtx && !err.HasSet() {
+					select {
+					case <-ctx.Done():
+						err.Set(ctx.Err()) // 顶层上下文终止。
+					default:
+					}
 				}
+			default:
+				fnErr = f(userCtx)
 			}
-		}(f)
+		}()
 	}
 
 	// 所有任务运行完毕，释放上下文资源。
@@ -100,39 +94,19 @@ func RunConcurrently(ctx context.Context, fn ...func(context.Context) error) (wa
 		if fastExit {
 			select {
 			case <-innerCtx.Done(): // 上下文终止了就立刻返回。
-				// 可能是顶层上下文终止了。
-				e := err.Get()
-				if e == nil {
-					return ctx.Err()
+				if !nilCtx && !err.HasSet() {
+					select {
+					case <-ctx.Done():
+						err.Set(ctx.Err()) // 可能是顶层上下文终止了。
+					default:
+					}
 				}
-				return e
+				err.Set(nil) // 记上设置标记。
+				return err.Get()
 			}
 		}
 
 		wg.Wait()
 		return err.Get()
 	}
-}
-
-// Set 设置错误信息，除非 err 是空。返回真表示设置成功。
-func (e *AtomicError) Set(err error) bool {
-	if err == nil {
-		return false
-	}
-	return e.err.CompareAndSwap(nil, err)
-}
-
-// Get 获取内部错误信息。
-func (e *AtomicError) Get() error {
-	err, _ := e.err.Load().(error)
-	return err
-}
-
-// 将恐慌信息以 error 形式返回。并继承恐慌中的 error。
-func wrapperPanic(p any) error {
-	pe, ok := p.(error)
-	if ok {
-		return fmt.Errorf("panic: %w [recovered]\n%s\n", pe, getStackCallers())
-	}
-	return fmt.Errorf("panic: %v [recovered]\n%s\n", p, getStackCallers())
 }

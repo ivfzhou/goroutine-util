@@ -14,6 +14,7 @@ package goroutine_util_test
 
 import (
 	"math/rand"
+	"runtime"
 	"testing"
 
 	gu "gitee.com/ivfzhou/goroutine-util"
@@ -22,7 +23,61 @@ import (
 func TestQueue(t *testing.T) {
 	t.Run("正常使用", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
-			data := make([]int, 1024*1024*(rand.Intn(3)+1))
+			expectedResult := make([]int, 1000)
+			for i := range expectedResult {
+				expectedResult[i] = rand.Intn(100)
+			}
+
+			queue := &gu.Queue[int]{}
+			go func() {
+				for i := range expectedResult {
+					ok := queue.Push(expectedResult[i])
+					if !ok {
+						t.Errorf("unexpected result: want true, got %v", ok)
+					}
+				}
+				queue.Close()
+			}()
+
+			index := 0
+			for v := range queue.GetFromChan() {
+				if v != expectedResult[index] {
+					t.Errorf("unexpected result: want %v, got %v", expectedResult[index], v)
+				}
+				index++
+			}
+		}
+	})
+
+	t.Run("关闭后再 Push", func(t *testing.T) {
+		for i := 0; i < 100; i++ {
+			queue := &gu.Queue[int]{}
+			ok := queue.Push(1)
+			if !ok {
+				t.Errorf("unexpected result: want true, got %v", ok)
+			}
+			queue.Close()
+
+			ok = queue.Push(2)
+			if ok {
+				t.Errorf("unexpected result: want false, got %v", ok)
+			}
+
+			value := <-queue.GetFromChan()
+			if value != 1 {
+				t.Errorf("unexpected result: want 1, got %v", value)
+			}
+
+			_, ok = <-queue.GetFromChan()
+			if ok {
+				t.Errorf("unexpected result: want false, got %v", ok)
+			}
+		}
+	})
+
+	t.Run("大量数据", func(t *testing.T) {
+		for i := 0; i < 100; i++ {
+			data := make([]int, 1024*100*(rand.Intn(5)+1)+10)
 			for i := range data {
 				data[i] = rand.Intn(100)
 			}
@@ -45,27 +100,10 @@ func TestQueue(t *testing.T) {
 				}
 				index++
 			}
-		}
-	})
 
-	t.Run("关闭后再 Push", func(t *testing.T) {
-		queue := &gu.Queue[int]{}
-		ok := queue.Push(1)
-		if !ok {
-			t.Errorf("unexpected result: want true, got %v", ok)
-		}
-		queue.Close()
-		ok = queue.Push(2)
-		if ok {
-			t.Errorf("unexpected result: want false, got %v", ok)
-		}
-		value := <-queue.GetFromChan()
-		if value != 1 {
-			t.Errorf("unexpected result: want 1, got %v", value)
-		}
-		_, ok = <-queue.GetFromChan()
-		if ok {
-			t.Errorf("unexpected result: want false, got %v", ok)
+			data = nil
+			queue = nil
+			runtime.GC()
 		}
 	})
 }

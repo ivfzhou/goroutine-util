@@ -15,45 +15,146 @@ package goroutine_util_test
 import (
 	"context"
 	"errors"
-	"strings"
-	"sync/atomic"
+	"math/rand"
 	"testing"
 
 	gu "gitee.com/ivfzhou/goroutine-util"
 )
 
 func TestRunData(t *testing.T) {
-	ctx := context.Background()
-	count := int32(0)
-	err := gu.RunData(ctx, func(ctx context.Context, t int32) error {
-		atomic.AddInt32(&count, t)
-		return nil
-	}, true, 1, 2, 3, 4)
-	if err != nil {
-		t.Error("concurrent: unexpected error", err)
-	}
-	if count != 10 {
-		t.Error("concurrent: unexpected count", count)
-	}
+	t.Run("正常运行", func(t *testing.T) {
+		for i := 0; i < 100; i++ {
+			type job struct {
+				i int
+				x int
+			}
+			var jobCount = 100
+			jobs := make([]*job, jobCount)
+			expectedResult := make(map[int]int, jobCount)
+			for i := 0; i < jobCount; i++ {
+				jobs[i] = &job{i: i, x: rand.Intn(100)}
+				expectedResult[i] = jobs[i].x + 1
+			}
 
-	expectedErr := errors.New("expected error")
-	err = gu.RunData(ctx, func(ctx context.Context, t int32) error {
-		if t == 3 {
-			return expectedErr
-		}
-		return nil
-	}, true, 1, 2, 3, 4)
-	if err != expectedErr {
-		t.Error("concurrent: unexpected error", err)
-	}
+			err := gu.RunData(context.Background(), func(ctx context.Context, t *job) error {
+				t.x++
+				return nil
+			}, rand.Intn(2) == 1, jobs...)
+			if err != nil {
+				t.Errorf("unexpected error: want nil, got %v", err)
+			}
 
-	err = gu.RunData(ctx, func(ctx context.Context, t int32) error {
-		if t == 3 {
-			panic(t)
+			for i := range jobs {
+				if expectedResult[i] != jobs[i].x {
+					t.Errorf("unexpected result: want %v, got %v", expectedResult[i], jobs[i].x)
+				}
+			}
 		}
-		return nil
-	}, true, 1, 2, 3, 4)
-	if err == nil || !strings.Contains(err.Error(), "3") {
-		t.Error("concurrent: unexpected error", err)
-	}
+	})
+
+	t.Run("发生错误", func(t *testing.T) {
+		for i := 0; i < 100; i++ {
+			type job struct {
+				i int
+				x int
+			}
+			var jobCount = 100
+			jobs := make([]*job, jobCount)
+			expectedResult := make(map[int]int, jobCount)
+			expectedErr := errors.New("expected error")
+			for i := 0; i < jobCount; i++ {
+				jobs[i] = &job{i: i, x: rand.Intn(100)}
+				expectedResult[i] = jobs[i].x + 1
+			}
+
+			occurErrorIndex := rand.Intn(jobCount / 2)
+			err := gu.RunData(context.Background(), func(ctx context.Context, t *job) error {
+				if occurErrorIndex == t.i {
+					return expectedErr
+				}
+				t.x++
+				return nil
+			}, rand.Intn(2) == 1, jobs...)
+			if !errors.Is(err, expectedErr) {
+				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
+			}
+
+			for i := range jobs {
+				if expectedResult[i] < jobs[i].x {
+					t.Errorf("unexpected result: want <= %v, got %v", expectedResult[i], jobs[i].x)
+				}
+			}
+		}
+	})
+
+	t.Run("上下文终止", func(t *testing.T) {
+		for i := 0; i < 100; i++ {
+			type job struct {
+				i int
+				x int
+			}
+			var jobCount = 100
+			jobs := make([]*job, jobCount)
+			expectedResult := make(map[int]int, jobCount)
+			expectedErr := errors.New("expected error")
+			for i := 0; i < jobCount; i++ {
+				jobs[i] = &job{i: i, x: rand.Intn(100)}
+				expectedResult[i] = jobs[i].x + 1
+			}
+
+			ctx, cancel := newCtxCancelWithError()
+			occurErrorIndex := rand.Intn(jobCount / 2)
+			err := gu.RunData(ctx, func(ctx context.Context, t *job) error {
+				if occurErrorIndex == t.i {
+					cancel(expectedErr)
+				}
+				t.x++
+				return nil
+			}, rand.Intn(2) == 1, jobs...)
+			if !errors.Is(err, expectedErr) {
+				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
+			}
+
+			for i := range jobs {
+				if expectedResult[i] < jobs[i].x {
+					t.Errorf("unexpected result: want <= %v, got %v", expectedResult[i], jobs[i].x)
+				}
+			}
+		}
+	})
+
+	t.Run("发生恐慌", func(t *testing.T) {
+		for i := 0; i < 100; i++ {
+			type job struct {
+				i int
+				x int
+			}
+			var jobCount = 100
+			jobs := make([]*job, jobCount)
+			expectedResult := make(map[int]int, jobCount)
+			expectedErr := errors.New("expected error")
+			for i := 0; i < jobCount; i++ {
+				jobs[i] = &job{i: i, x: rand.Intn(100)}
+				expectedResult[i] = jobs[i].x + 1
+			}
+
+			occurErrorIndex := rand.Intn(jobCount / 2)
+			err := gu.RunData(context.Background(), func(ctx context.Context, t *job) error {
+				if occurErrorIndex == t.i {
+					panic(expectedErr)
+				}
+				t.x++
+				return nil
+			}, rand.Intn(2) == 1, jobs...)
+			if !errors.Is(err, expectedErr) {
+				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
+			}
+
+			for i := range jobs {
+				if expectedResult[i] < jobs[i].x {
+					t.Errorf("unexpected result: want <= %v, got %v", expectedResult[i], jobs[i].x)
+				}
+			}
+		}
+	})
 }

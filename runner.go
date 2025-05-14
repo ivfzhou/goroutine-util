@@ -15,9 +15,6 @@ package goroutine_util
 import (
 	"context"
 	"errors"
-	"fmt"
-	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -53,16 +50,14 @@ func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) 
 	}
 
 	// 上下文终止了，就不必再分配资源，直接返回。
-	nilCtx := false
+	userCtx := ctx
 	if ctx == nil {
-		nilCtx = true
 		ctx = context.Background()
-	}
-	if !nilCtx {
+	} else {
 		select {
 		case <-ctx.Done():
 			err := ctx.Err()
-			return func(t T, block bool) error { return err }, func(bool) error { return err }
+			return func(T, bool) error { return err }, func(bool) error { return err }
 		default:
 		}
 	}
@@ -104,11 +99,7 @@ func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) 
 		select {
 		case <-innerCtx.Done():
 		default:
-			if nilCtx {
-				fnErr = fn(nil, t)
-			} else {
-				fnErr = fn(ctx, t)
-			}
+			fnErr = fn(userCtx, t)
 		}
 	}
 
@@ -176,27 +167,4 @@ func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) 
 	}
 
 	return
-}
-
-// 获取函数调用堆栈信息。
-func getStackCallers() string {
-	callers := make([]uintptr, 3*12)
-	n := runtime.Callers(3, callers)
-	callers = callers[:n]
-	frames := runtime.CallersFrames(callers)
-	callers = nil
-	var (
-		frame runtime.Frame
-		more  bool
-	)
-	sb := &strings.Builder{}
-	for {
-		frame, more = frames.Next()
-		_, _ = fmt.Fprintf(sb, "%s\n", frame.Function)
-		_, _ = fmt.Fprintf(sb, "    %s:%v\n", frame.File, frame.Line)
-		if !more {
-			break
-		}
-	}
-	return sb.String()
 }

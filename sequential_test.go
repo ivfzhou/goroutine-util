@@ -34,9 +34,8 @@ func ExampleRunSequentially() {
 func TestRunSequentially(t *testing.T) {
 	t.Run("正常运行", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
-			ctx := context.Background()
 			expectedResult := 1
-			err := gu.RunSequentially(ctx,
+			err := gu.RunSequentially(context.Background(),
 				func(context.Context) error {
 					if expectedResult != 1 {
 						t.Errorf("expected result: want 1, got %v", expectedResult)
@@ -66,10 +65,9 @@ func TestRunSequentially(t *testing.T) {
 
 	t.Run("发生错误", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
-			ctx := context.Background()
 			expectedResult := 0
 			expectedErr := errors.New("expected error")
-			err := gu.RunSequentially(ctx,
+			err := gu.RunSequentially(context.Background(),
 				func(context.Context) error {
 					expectedResult++
 					return nil
@@ -94,10 +92,9 @@ func TestRunSequentially(t *testing.T) {
 
 	t.Run("发生恐慌", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
-			ctx := context.Background()
 			expectedResult := 0
 			expectedErr := errors.New("expected error")
-			err := gu.RunSequentially(ctx,
+			err := gu.RunSequentially(context.Background(),
 				func(context.Context) error {
 					expectedResult++
 					return nil

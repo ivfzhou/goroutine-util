@@ -43,98 +43,93 @@ func ExampleRunConcurrently() {
 	}
 }
 
-type ctxCancelWithError struct {
-	ctx context.Context
-	err gu.AtomicError
-}
-
 func TestRunConcurrently(t *testing.T) {
 	t.Run("正常运行", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
-			ctx := context.Background()
-
-			const count = 1000
+			const fnCount = 1000
 			expectedResult := int32(0)
-			fns := make([]func(ctx context.Context) error, count)
-			for i := 0; i < count; i++ {
-				fns[i] = func(ctx context.Context) error {
-					time.Sleep(time.Millisecond * 100)
+			fns := make([]func(context.Context) error, fnCount)
+			for i := 0; i < fnCount; i++ {
+				fns[i] = func(context.Context) error {
+					time.Sleep(time.Millisecond * 10)
 					atomic.AddInt32(&expectedResult, 1)
 					return nil
 				}
 			}
 
-			fastExit := rand.Intn(2) == 0
+			fastExit := rand.Intn(2) == 1
+			ctx := context.Background()
+			if rand.Intn(2) == 1 {
+				ctx = nil
+			}
 			err := gu.RunConcurrently(ctx, fns...)(fastExit)
 			if err != nil {
 				t.Errorf("unexpected error: want nil, got %v", err)
 			}
-			if result := atomic.LoadInt32(&expectedResult); result != count {
-				t.Errorf("unexpected result: want %v, got %v", count, result)
+			if result := atomic.LoadInt32(&expectedResult); result != fnCount {
+				t.Errorf("unexpected result: want %v, got %v", fnCount, result)
 			}
 		}
 	})
 
 	t.Run("发生错误", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
-			ctx := context.Background()
 			expectedErr := errors.New("expected error")
 
-			const count = 1000
+			const fnCount = 1000
 			expectedResult := int32(0)
-			occurErrorIndex := rand.Intn(count)
-			fns := make([]func(ctx context.Context) error, count)
-			for i := 0; i < count; i++ {
+			occurErrorIndex := rand.Intn(fnCount)
+			fns := make([]func(context.Context) error, fnCount)
+			for i := 0; i < fnCount; i++ {
 				index := i
-				fns[i] = func(ctx context.Context) error {
+				fns[i] = func(context.Context) error {
 					if index == occurErrorIndex {
 						return expectedErr
 					}
-					time.Sleep(time.Millisecond * 100)
+					time.Sleep(time.Millisecond * 10)
 					atomic.AddInt32(&expectedResult, 1)
 					return nil
 				}
 			}
 
-			fastExit := rand.Intn(2) == 0
-			err := gu.RunConcurrently(ctx, fns...)(fastExit)
-			if err == nil || !errors.Is(err, expectedErr) {
+			fastExit := rand.Intn(2) == 1
+			err := gu.RunConcurrently(context.Background(), fns...)(fastExit)
+			if !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 			}
-			if result := atomic.LoadInt32(&expectedResult); result >= count {
-				t.Errorf("unexpected result: want <=%v, got %v", count, result)
+			if result := atomic.LoadInt32(&expectedResult); int(result) >= fnCount {
+				t.Errorf("unexpected result: want < %v, got %v", fnCount, result)
 			}
 		}
 	})
 
 	t.Run("发生恐慌", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
-			ctx := context.Background()
 			expectedErr := errors.New("expected error")
 
-			const count = 1000
+			const fnCount = 1000
 			expectedResult := int32(0)
-			panicIndex := rand.Intn(count)
-			fns := make([]func(ctx context.Context) error, count)
-			for i := 0; i < count; i++ {
+			panicIndex := rand.Intn(fnCount)
+			fns := make([]func(context.Context) error, fnCount)
+			for i := 0; i < fnCount; i++ {
 				index := i
-				fns[i] = func(ctx context.Context) error {
+				fns[i] = func(context.Context) error {
 					if index == panicIndex {
 						panic(expectedErr)
 					}
-					time.Sleep(time.Millisecond * 100)
+					time.Sleep(time.Millisecond * 10)
 					atomic.AddInt32(&expectedResult, 1)
 					return nil
 				}
 			}
 
-			fastExit := rand.Intn(2) == 0
-			err := gu.RunConcurrently(ctx, fns...)(fastExit)
-			if err == nil || !errors.Is(err, expectedErr) {
+			fastExit := rand.Intn(2) == 1
+			err := gu.RunConcurrently(context.Background(), fns...)(fastExit)
+			if !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 			}
-			if result := atomic.LoadInt32(&expectedResult); result >= count {
-				t.Errorf("unexpected result: want <=%v, got %v", count, result)
+			if result := atomic.LoadInt32(&expectedResult); result >= fnCount {
+				t.Errorf("unexpected result: want < %v, got %v", fnCount, result)
 			}
 		}
 	})
@@ -144,55 +139,53 @@ func TestRunConcurrently(t *testing.T) {
 			ctx, cancel := newCtxCancelWithError()
 			expectedErr := errors.New("expected error")
 
-			const count = 1000
+			const fnCount = 1000
 			expectedResult := int32(0)
-			cancelIndex := rand.Intn(count / 2)
-			fns := make([]func(ctx context.Context) error, count)
-			for i := 0; i < count; i++ {
+			cancelIndex := rand.Intn(fnCount / 2)
+			fns := make([]func(context.Context) error, fnCount)
+			for i := 0; i < fnCount; i++ {
 				index := i
-				fns[i] = func(ctx context.Context) error {
+				fns[i] = func(context.Context) error {
 					if index == cancelIndex {
 						cancel(expectedErr)
 					}
-					time.Sleep(time.Millisecond * 100)
+					time.Sleep(time.Millisecond * 10)
 					atomic.AddInt32(&expectedResult, 1)
 					return nil
 				}
 			}
 
-			fastExit := rand.Intn(2) == 0
+			fastExit := rand.Intn(2) == 1
 			err := gu.RunConcurrently(ctx, fns...)(fastExit)
-			if err == nil || !errors.Is(err, expectedErr) {
+			if !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 			}
-			if result := atomic.LoadInt32(&expectedResult); result >= count {
-				t.Errorf("unexpected result: want <=%v, got %v", count, result)
+			if result := atomic.LoadInt32(&expectedResult); result >= fnCount {
+				t.Errorf("unexpected result: want < %v, got %v", fnCount, result)
 			}
 		}
 	})
-}
 
-func newCtxCancelWithError() (context.Context, context.CancelCauseFunc) {
-	ctx, cancel := context.WithCancel(context.Background())
-	c := &ctxCancelWithError{ctx: ctx}
-	return c, func(cause error) {
-		c.err.Set(cause)
-		cancel()
-	}
-}
+	t.Run("大量函数", func(t *testing.T) {
+		for i := 0; i < 100; i++ {
+			var fnCount = 1024*100*(rand.Intn(5)+1) + 10
+			expectedResult := int32(0)
+			fns := make([]func(context.Context) error, fnCount)
+			for i := 0; i < fnCount; i++ {
+				fns[i] = func(context.Context) error {
+					atomic.AddInt32(&expectedResult, 1)
+					return nil
+				}
+			}
 
-func (c *ctxCancelWithError) Deadline() (deadline time.Time, ok bool) {
-	return c.ctx.Deadline()
-}
-
-func (c *ctxCancelWithError) Done() <-chan struct{} {
-	return c.ctx.Done()
-}
-
-func (c *ctxCancelWithError) Err() error {
-	return c.err.Get()
-}
-
-func (c *ctxCancelWithError) Value(key any) any {
-	return c.ctx.Value(key)
+			fastExit := rand.Intn(2) == 1
+			err := gu.RunConcurrently(context.Background(), fns...)(fastExit)
+			if err != nil {
+				t.Errorf("unexpected error: want nil, got %v", err)
+			}
+			if result := atomic.LoadInt32(&expectedResult); int(result) != fnCount {
+				t.Errorf("unexpected result: want %v, got %v", fnCount, result)
+			}
+		}
+	})
 }

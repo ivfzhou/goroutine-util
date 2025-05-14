@@ -19,15 +19,13 @@ import (
 
 // RunData 将 jobs 传给 fn，并发运行 fn。若发生错误，就立刻终止运行。
 //
-// ctx：上下文。如果上下文终止了，则终止运行。
+// ctx：上下文。如果上下文终止了，则终止运行，并返回 ctx.Err()。
 //
 // fn：要运行处理 jobs 的函数。
 //
 // fastExit：发生错误就立刻返回，不等待所有协程全部退出。
 //
 // jobs：要处理的任务。
-//
-// 返回错误与 fn 返回的错误一致。
 //
 // 注意：fn 为空将触发恐慌。
 func RunData[T any](ctx context.Context, fn func(context.Context, T) error, fastExit bool, jobs ...T) error {
@@ -42,13 +40,11 @@ func RunData[T any](ctx context.Context, fn func(context.Context, T) error, fast
 	}
 
 	nilCtx := false
+	userCtx := ctx
 	if ctx == nil {
 		nilCtx = true
 		ctx = context.Background()
-	}
-
-	// 上下文终止了就直接返回。
-	if !nilCtx {
+	} else { // 上下文终止了就直接返回。
 		select {
 		case <-ctx.Done():
 			err := ctx.Err()
@@ -77,11 +73,7 @@ func RunData[T any](ctx context.Context, fn func(context.Context, T) error, fast
 				cancel()
 			}
 		}()
-		if nilCtx {
-			fnErr = fn(nil, job)
-		} else {
-			fnErr = fn(ctx, job)
-		}
+		fnErr = fn(userCtx, job)
 	}
 	for _, v := range jobs {
 		wg.Add(1)
@@ -95,10 +87,13 @@ func RunData[T any](ctx context.Context, fn func(context.Context, T) error, fast
 	}()
 
 	select {
-	case <-innerCtx.Done(): // 上下文终止了，可能时发生了错误。
-		e := err.Get()
-		if e == nil && !nilCtx { // 也可能是上层上下文终止了。
-			err.Set(ctx.Err())
+	case <-innerCtx.Done(): // 上下文终止了，可能是发生了错误。
+		if !nilCtx && !err.HasSet() { // 也可能是上层上下文终止了。
+			select {
+			case <-ctx.Done():
+				err.Set(ctx.Err())
+			default:
+			}
 		}
 		if fastExit {
 			return err.Get()

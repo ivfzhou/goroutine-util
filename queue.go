@@ -24,13 +24,13 @@ type Queue[E any] struct {
 }
 
 type queueElem[E any] struct {
-	elem     E
-	nextElem *queueElem[E]
+	elem               E
+	nextElem, prevElem *queueElem[E]
 }
 
 // Push 向队列尾部加元素，如果队列关闭则不会加元素。
 //
-// 添加成功返回 true。
+// bool：添加成功返回 true。
 func (q *Queue[E]) Push(elem E) bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
@@ -42,12 +42,17 @@ func (q *Queue[E]) Push(elem E) bool {
 	}
 
 	newElem := &queueElem[E]{elem: elem}
-	if q.headElem == nil {
+	if q.headElem == nil && q.tailElem == nil { // 第一个元素。
 		q.headElem = newElem
 		q.tailElem = newElem
+	} else if q.headElem == q.tailElem { // 第二个元素。
+		q.headElem = newElem
+		q.headElem.nextElem = q.tailElem
+		q.tailElem.prevElem = q.headElem
 	} else {
-		q.tailElem.nextElem = newElem
-		q.tailElem = newElem
+		newElem.nextElem = q.headElem
+		q.headElem.prevElem = newElem
+		q.headElem = newElem
 	}
 
 	select {
@@ -97,13 +102,21 @@ func (q *Queue[E]) init() {
 
 // 不断向通过发送数据，直到被关闭了。
 func (q *Queue[E]) send() {
+	getCloseSignal := false
 	for {
 		q.lock.Lock()
-		elem := q.headElem
+		elem := q.tailElem
 		if elem != nil {
-			q.headElem = elem.nextElem
-			if q.headElem == nil {
+			if elem == q.headElem { // 最后一个元素。
+				q.headElem = nil
 				q.tailElem = nil
+			} else if elem.prevElem == q.headElem { // 倒数第二个元素。
+				q.headElem.nextElem = nil
+				q.headElem.prevElem = nil
+				q.tailElem = q.headElem
+			} else {
+				q.tailElem = elem.prevElem
+				q.tailElem.nextElem = nil
 			}
 			q.lock.Unlock()
 			q.getElemChan <- elem.elem
@@ -113,9 +126,14 @@ func (q *Queue[E]) send() {
 
 		select {
 		case <-q.closeSignal:
-			close(q.getElemChan)
-			close(q.notifyGetSignal)
-			return
+			if getCloseSignal {
+				close(q.getElemChan)
+				close(q.notifyGetSignal)
+				return
+			}
+			getCloseSignal = true
+			// 再循环一次，可能在 Push 完一个元素后，触发了 Close。此时，这里的 select 可以选择两个。
+			// 若是选择了 closeSignal，则有元素没有发送出去。
 		case <-q.notifyGetSignal:
 		}
 	}

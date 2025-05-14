@@ -31,10 +31,7 @@ func RunSequentially(ctx context.Context, fn ...func(context.Context) error) err
 	nilCtx := false
 	if ctx == nil {
 		nilCtx = true
-	}
-
-	// 检测上下文是否已经终止。
-	if !nilCtx {
+	} else { // 检测上下文是否已经终止。
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -42,13 +39,12 @@ func RunSequentially(ctx context.Context, fn ...func(context.Context) error) err
 		}
 	}
 
-	// 包裹 fn，捕获恐慌。
-	fnWrapper := func(f func(ctx context.Context) error) (err error) {
-		defer func() {
-			if p := recover(); p != nil {
-				err = wrapperPanic(p)
-			}
-		}()
+	// 依次运行 fn。
+	var err error
+	for _, f := range fn {
+		if f == nil {
+			continue
+		}
 
 		// 检测上下文是否终止。
 		if !nilCtx {
@@ -58,17 +54,16 @@ func RunSequentially(ctx context.Context, fn ...func(context.Context) error) err
 			default:
 			}
 		}
-		err = f(ctx)
-		return
-	}
 
-	// 依次运行 fn。
-	var err error
-	for _, f := range fn {
-		if f == nil {
-			continue
-		}
-		if err = fnWrapper(f); err != nil {
+		func() {
+			defer func() {
+				if p := recover(); p != nil {
+					err = wrapperPanic(p)
+				}
+			}()
+			err = f(ctx)
+		}()
+		if err != nil {
 			return err
 		}
 	}
