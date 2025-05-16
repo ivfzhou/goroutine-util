@@ -120,7 +120,18 @@ func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) 
 
 		// 不阻塞添加任务。
 		if !block || limiter == nil {
-			go fnWrapper(t, false)
+			go func() {
+				if limiter == nil {
+					fnWrapper(t, false)
+					return
+				}
+				select {
+				case <-innerCtx.Done():
+					wg.Done() // 减少计数器。
+				case limiter <- struct{}{}:
+					fnWrapper(t, true)
+				}
+			}()
 			return err.Get()
 		}
 
