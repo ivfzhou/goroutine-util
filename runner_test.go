@@ -224,7 +224,7 @@ func TestNewRunner(t *testing.T) {
 		}
 	})
 
-	t.Run("大量add/wait", func(t *testing.T) {
+	t.Run("大量add、wait", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			maxRoutines := 0
 			if rand.Intn(2) == 1 {

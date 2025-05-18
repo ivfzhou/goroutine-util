@@ -356,7 +356,7 @@ func TestRunPipeline(t *testing.T) {
 		type job struct {
 			x int
 		}
-		jobCount := 1024*1024*(rand.Intn(5)+1) + 10
+		jobCount := 1024*100*(rand.Intn(5)+1) + 10
 		stepCount := 50
 		expectedResult := make([]int, jobCount)
 		jobs := make([]*job, jobCount)
