@@ -40,7 +40,7 @@ func (c *ctxCancelWithError) Value(key any) any {
 	return c.Context.Value(key)
 }
 
-func newCtxCancelWithError() (context.Context, context.CancelCauseFunc) {
+func NewCtxCancelWithError() (context.Context, context.CancelCauseFunc) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &ctxCancelWithError{Context: ctx}
 	return c, func(cause error) {

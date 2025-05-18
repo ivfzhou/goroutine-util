@@ -64,7 +64,6 @@ func TestNewRunner(t *testing.T) {
 				atomic.AddInt32(&result, t.x)
 				return nil
 			})
-
 			var err error
 			expectedResult := int32(0)
 			const jobCount = 800
@@ -80,7 +79,6 @@ func TestNewRunner(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error: want nil, got %v", err)
 			}
-
 			if err = wait(rand.Intn(2) == 1); err != nil {
 				t.Errorf("unexpected error: want nil, got %v", err)
 			}
@@ -111,7 +109,6 @@ func TestNewRunner(t *testing.T) {
 				atomic.AddInt32(&result, t.y)
 				return nil
 			})
-
 			var err error
 			expectedResult := int32(0)
 			for i := int32(0); i < jobCount; i++ {
@@ -126,7 +123,6 @@ func TestNewRunner(t *testing.T) {
 			if err != nil && !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 			}
-
 			waitFast := rand.Intn(2) == 1
 			if err = wait(waitFast); !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
@@ -158,7 +154,6 @@ func TestNewRunner(t *testing.T) {
 				atomic.AddInt32(&result, t.y)
 				return nil
 			})
-
 			var err error
 			expectedCount := int32(0)
 			for i := int32(0); i < jobCount; i++ {
@@ -173,7 +168,6 @@ func TestNewRunner(t *testing.T) {
 			if err != nil && !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 			}
-
 			waitFast := rand.Intn(2) == 1
 			if err = wait(waitFast); !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
@@ -194,7 +188,7 @@ func TestNewRunner(t *testing.T) {
 				x, y int32
 			}
 			expectedErr := errors.New("expected error")
-			ctx, cancel := newCtxCancelWithError()
+			ctx, cancel := NewCtxCancelWithError()
 			result := int32(0)
 			const jobCount = 800
 			cancelIndex := rand.Int31n(jobCount / 2)
@@ -206,7 +200,6 @@ func TestNewRunner(t *testing.T) {
 				atomic.AddInt32(&result, t.y)
 				return nil
 			})
-
 			var err error
 			expectedResult := int32(0)
 			for i := int32(0); i < jobCount; i++ {
@@ -221,7 +214,6 @@ func TestNewRunner(t *testing.T) {
 			if err != nil && !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 			}
-
 			waitFast := rand.Intn(2) == 1
 			if err = wait(waitFast); !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
@@ -248,7 +240,6 @@ func TestNewRunner(t *testing.T) {
 				atomic.AddInt32(&result, t.x)
 				return nil
 			})
-
 			wg := sync.WaitGroup{}
 			expectedResult := int32(0)
 			for i := int32(0); i < jobCount; i++ {
@@ -261,7 +252,6 @@ func TestNewRunner(t *testing.T) {
 				}()
 			}
 			wg.Wait()
-
 			waitErrorMap := sync.Map{}
 			for i := 0; i < jobCount; i++ {
 				wg.Add(1)
@@ -271,7 +261,6 @@ func TestNewRunner(t *testing.T) {
 				}(i)
 			}
 			wg.Wait()
-
 			err := wait(rand.Intn(2) == 1)
 			if err != nil {
 				t.Errorf("unexpected error: want nil, got %v", err)
@@ -299,7 +288,6 @@ func TestNewRunner(t *testing.T) {
 				time.Sleep(time.Millisecond * 100)
 				return nil
 			})
-
 			const jobCount = 1000
 			callWaitIndex := rand.Int31n(jobCount / 2)
 			wg := sync.WaitGroup{}
@@ -309,7 +297,6 @@ func TestNewRunner(t *testing.T) {
 						_ = wait(rand.Int31n(2) == 1)
 					}()
 				}
-
 				wg.Add(1)
 				go func() {
 					defer wg.Done()
@@ -345,7 +332,6 @@ func TestNewRunner(t *testing.T) {
 				atomic.AddInt32(&result, t.x)
 				return nil
 			})
-
 			var err error
 			expectedResult := int32(0)
 			for i := int32(0); i < jobCount; i++ {
@@ -360,7 +346,6 @@ func TestNewRunner(t *testing.T) {
 				t.Errorf("unexpected error: want nil, got %v", err)
 				return
 			}
-
 			if err = wait(rand.Intn(2) == 1); err != nil {
 				t.Errorf("unexpected error: want nil, got %v", err)
 			}

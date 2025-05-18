@@ -35,7 +35,6 @@ func TestRunData(t *testing.T) {
 				jobs[i] = &job{i: i, x: rand.Intn(100)}
 				expectedResult[i] = jobs[i].x + 1
 			}
-
 			err := gu.RunData(context.Background(), func(ctx context.Context, t *job) error {
 				t.x++
 				return nil
@@ -43,7 +42,6 @@ func TestRunData(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpected error: want nil, got %v", err)
 			}
-
 			for i := range jobs {
 				if expectedResult[i] != jobs[i].x {
 					t.Errorf("unexpected result: want %v, got %v", expectedResult[i], jobs[i].x)
@@ -66,7 +64,6 @@ func TestRunData(t *testing.T) {
 				jobs[i] = &job{i: i, x: rand.Intn(100)}
 				expectedResult[i] = jobs[i].x + 1
 			}
-
 			occurErrorIndex := rand.Intn(jobCount / 2)
 			err := gu.RunData(context.Background(), func(ctx context.Context, t *job) error {
 				if occurErrorIndex == t.i {
@@ -78,7 +75,6 @@ func TestRunData(t *testing.T) {
 			if !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 			}
-
 			for i := range jobs {
 				if expectedResult[i] < jobs[i].x {
 					t.Errorf("unexpected result: want <= %v, got %v", expectedResult[i], jobs[i].x)
@@ -101,8 +97,7 @@ func TestRunData(t *testing.T) {
 				jobs[i] = &job{i: i, x: rand.Intn(100)}
 				expectedResult[i] = jobs[i].x + 1
 			}
-
-			ctx, cancel := newCtxCancelWithError()
+			ctx, cancel := NewCtxCancelWithError()
 			occurErrorIndex := rand.Intn(jobCount / 2)
 			err := gu.RunData(ctx, func(ctx context.Context, t *job) error {
 				if occurErrorIndex == t.i {
@@ -114,7 +109,6 @@ func TestRunData(t *testing.T) {
 			if !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 			}
-
 			for i := range jobs {
 				if expectedResult[i] < jobs[i].x {
 					t.Errorf("unexpected result: want <= %v, got %v", expectedResult[i], jobs[i].x)
@@ -137,7 +131,6 @@ func TestRunData(t *testing.T) {
 				jobs[i] = &job{i: i, x: rand.Intn(100)}
 				expectedResult[i] = jobs[i].x + 1
 			}
-
 			occurErrorIndex := rand.Intn(jobCount / 2)
 			err := gu.RunData(context.Background(), func(ctx context.Context, t *job) error {
 				if occurErrorIndex == t.i {
@@ -149,7 +142,6 @@ func TestRunData(t *testing.T) {
 			if !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 			}
-
 			for i := range jobs {
 				if expectedResult[i] < jobs[i].x {
 					t.Errorf("unexpected result: want <= %v, got %v", expectedResult[i], jobs[i].x)

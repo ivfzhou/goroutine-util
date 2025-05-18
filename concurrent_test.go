@@ -56,7 +56,6 @@ func TestRunConcurrently(t *testing.T) {
 					return nil
 				}
 			}
-
 			fastExit := rand.Intn(2) == 1
 			ctx := context.Background()
 			if rand.Intn(2) == 1 {
@@ -75,7 +74,6 @@ func TestRunConcurrently(t *testing.T) {
 	t.Run("发生错误", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			expectedErr := errors.New("expected error")
-
 			const fnCount = 1000
 			expectedResult := int32(0)
 			occurErrorIndex := rand.Intn(fnCount)
@@ -91,7 +89,6 @@ func TestRunConcurrently(t *testing.T) {
 					return nil
 				}
 			}
-
 			fastExit := rand.Intn(2) == 1
 			err := gu.RunConcurrently(context.Background(), fns...)(fastExit)
 			if !errors.Is(err, expectedErr) {
@@ -106,7 +103,6 @@ func TestRunConcurrently(t *testing.T) {
 	t.Run("发生恐慌", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			expectedErr := errors.New("expected error")
-
 			const fnCount = 1000
 			expectedResult := int32(0)
 			panicIndex := rand.Intn(fnCount)
@@ -122,7 +118,6 @@ func TestRunConcurrently(t *testing.T) {
 					return nil
 				}
 			}
-
 			fastExit := rand.Intn(2) == 1
 			err := gu.RunConcurrently(context.Background(), fns...)(fastExit)
 			if !errors.Is(err, expectedErr) {
@@ -136,9 +131,8 @@ func TestRunConcurrently(t *testing.T) {
 
 	t.Run("上下文终止", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
-			ctx, cancel := newCtxCancelWithError()
+			ctx, cancel := NewCtxCancelWithError()
 			expectedErr := errors.New("expected error")
-
 			const fnCount = 1000
 			expectedResult := int32(0)
 			cancelIndex := rand.Intn(fnCount / 2)
@@ -154,7 +148,6 @@ func TestRunConcurrently(t *testing.T) {
 					return nil
 				}
 			}
-
 			fastExit := rand.Intn(2) == 1
 			err := gu.RunConcurrently(ctx, fns...)(fastExit)
 			if !errors.Is(err, expectedErr) {
@@ -167,25 +160,22 @@ func TestRunConcurrently(t *testing.T) {
 	})
 
 	t.Run("大量函数", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
-			var fnCount = 1024*100*(rand.Intn(5)+1) + 10
-			expectedResult := int32(0)
-			fns := make([]func(context.Context) error, fnCount)
-			for i := 0; i < fnCount; i++ {
-				fns[i] = func(context.Context) error {
-					atomic.AddInt32(&expectedResult, 1)
-					return nil
-				}
+		var fnCount = 1024*1024*(rand.Intn(5)+1) + 10
+		expectedResult := int32(0)
+		fns := make([]func(context.Context) error, fnCount)
+		for i := 0; i < fnCount; i++ {
+			fns[i] = func(context.Context) error {
+				atomic.AddInt32(&expectedResult, 1)
+				return nil
 			}
-
-			fastExit := rand.Intn(2) == 1
-			err := gu.RunConcurrently(context.Background(), fns...)(fastExit)
-			if err != nil {
-				t.Errorf("unexpected error: want nil, got %v", err)
-			}
-			if result := atomic.LoadInt32(&expectedResult); int(result) != fnCount {
-				t.Errorf("unexpected result: want %v, got %v", fnCount, result)
-			}
+		}
+		fastExit := rand.Intn(2) == 1
+		err := gu.RunConcurrently(context.Background(), fns...)(fastExit)
+		if err != nil {
+			t.Errorf("unexpected error: want nil, got %v", err)
+		}
+		if result := atomic.LoadInt32(&expectedResult); int(result) != fnCount {
+			t.Errorf("unexpected result: want %v, got %v", fnCount, result)
 		}
 	})
 }

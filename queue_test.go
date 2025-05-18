@@ -14,7 +14,6 @@ package goroutine_util_test
 
 import (
 	"math/rand"
-	"runtime"
 	"testing"
 
 	gu "gitee.com/ivfzhou/goroutine-util"
@@ -27,7 +26,6 @@ func TestQueue(t *testing.T) {
 			for i := range expectedResult {
 				expectedResult[i] = rand.Intn(100)
 			}
-
 			queue := &gu.Queue[int]{}
 			go func() {
 				for i := range expectedResult {
@@ -38,7 +36,6 @@ func TestQueue(t *testing.T) {
 				}
 				queue.Close()
 			}()
-
 			index := 0
 			for v := range queue.GetFromChan() {
 				if v != expectedResult[index] {
@@ -62,12 +59,10 @@ func TestQueue(t *testing.T) {
 			if ok {
 				t.Errorf("unexpected result: want false, got %v", ok)
 			}
-
 			value := <-queue.GetFromChan()
 			if value != 1 {
 				t.Errorf("unexpected result: want 1, got %v", value)
 			}
-
 			_, ok = <-queue.GetFromChan()
 			if ok {
 				t.Errorf("unexpected result: want false, got %v", ok)
@@ -76,34 +71,28 @@ func TestQueue(t *testing.T) {
 	})
 
 	t.Run("大量数据", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
-			data := make([]int, 1024*100*(rand.Intn(5)+1)+10)
+		data := make([]int, 1024*1024*(rand.Intn(5)+1)+10)
+		for i := range data {
+			data[i] = rand.Intn(100)
+		}
+
+		queue := &gu.Queue[int]{}
+		go func() {
 			for i := range data {
-				data[i] = rand.Intn(100)
-			}
-
-			queue := &gu.Queue[int]{}
-			go func() {
-				for i := range data {
-					ok := queue.Push(data[i])
-					if !ok {
-						t.Errorf("unexpected result: want true, got %v", ok)
-					}
+				ok := queue.Push(data[i])
+				if !ok {
+					t.Errorf("unexpected result: want true, got %v", ok)
 				}
-				queue.Close()
-			}()
-
-			index := 0
-			for v := range queue.GetFromChan() {
-				if v != data[index] {
-					t.Errorf("unexpected result: want %v, got %v", data[index], v)
-				}
-				index++
 			}
+			queue.Close()
+		}()
 
-			data = nil
-			queue = nil
-			runtime.GC()
+		index := 0
+		for v := range queue.GetFromChan() {
+			if v != data[index] {
+				t.Errorf("unexpected result: want %v, got %v", data[index], v)
+			}
+			index++
 		}
 	})
 }

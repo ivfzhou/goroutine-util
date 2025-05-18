@@ -33,7 +33,6 @@ func TestListenChan(t *testing.T) {
 				err2,
 				err3,
 			}
-
 			expectedErr := errors.New("expected error")
 			go func() {
 				time.Sleep(time.Millisecond * 100)
@@ -55,12 +54,10 @@ func TestListenChan(t *testing.T) {
 					close(err2)
 				}
 			}()
-
 			ch := gu.ListenChan(errChans...)
 			if err := <-ch; !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 			}
-
 			err, ok := <-ch
 			if ok {
 				t.Errorf("unexpected result: want false, got %v, value is %v", ok, err)
@@ -78,7 +75,6 @@ func TestListenChan(t *testing.T) {
 				err2,
 				err3,
 			}
-
 			go func() {
 				time.Sleep(time.Millisecond * 100)
 				close(err1)
@@ -107,7 +103,6 @@ func TestListenChan(t *testing.T) {
 				nil,
 				err3,
 			}
-
 			go func() {
 				time.Sleep(time.Millisecond * 100)
 				close(err1)
@@ -135,7 +130,6 @@ func TestListenChan(t *testing.T) {
 				err2,
 				err3,
 			}
-
 			expectedErr := errors.New("expected error")
 			go func() {
 				time.Sleep(time.Millisecond * 100)
@@ -171,13 +165,12 @@ func TestListenChan(t *testing.T) {
 					close(c)
 				}(i, ch)
 			}
-
 			mergedCh := gu.ListenChan(errChans...)
 			result, ok := <-mergedCh
 			if !ok {
 				t.Errorf("unexpected result: want true, got %v", ok)
 			}
-			if result != expectedErr {
+			if !errors.Is(result, expectedErr) {
 				t.Errorf("unexpected result: want %v, got %v", expectedErr, result)
 			}
 			result, ok = <-mergedCh

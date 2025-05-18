@@ -69,14 +69,11 @@ func TestRunPipeline(t *testing.T) {
 				expectedResult[i] = v + 3
 			}
 			sort.Ints(expectedResult)
-
 			step1 := func(_ context.Context, j *job) error { j.x++; return nil }
 			step2 := func(_ context.Context, j *job) error { j.x++; return nil }
 			step3 := func(_ context.Context, j *job) error { j.x++; return nil }
 			successCh, errCh := gu.RunPipeline(context.Background(), jobs, rand.Intn(2) == 1, step1, step2, step3)
-
 			result := make([]int, 0, jobCount)
-
 			for {
 				if successCh == nil && errCh == nil {
 					break
@@ -96,7 +93,6 @@ func TestRunPipeline(t *testing.T) {
 					result = append(result, v.x)
 				}
 			}
-
 			sort.Ints(result)
 			if !reflect.DeepEqual(result, expectedResult) {
 				t.Errorf("unexpected result: want %v, got %v", len(expectedResult), len(result))
@@ -119,7 +115,6 @@ func TestRunPipeline(t *testing.T) {
 				jobs[i] = &job{i: i, x: v}
 				expectedResult[i] = v + 3
 			}
-
 			returnErrorIndex := rand.Intn(3)
 			occurErrorIndex := rand.Intn(jobCount / 2)
 			step1 := func(_ context.Context, j *job) error {
@@ -145,7 +140,6 @@ func TestRunPipeline(t *testing.T) {
 			}
 			stopWhenErr := rand.Intn(2) == 1
 			successCh, errCh := gu.RunPipeline(context.Background(), jobs, stopWhenErr, step1, step2, step3)
-
 			result := make([]*job, 0, jobCount)
 			for {
 				if successCh == nil && errCh == nil {
@@ -168,7 +162,6 @@ func TestRunPipeline(t *testing.T) {
 					}
 				}
 			}
-
 			if stopWhenErr {
 				for _, v := range result {
 					if expectedResult[v.i] != v.x {
@@ -203,7 +196,6 @@ func TestRunPipeline(t *testing.T) {
 				jobs[i] = &job{i: i, x: v}
 				expectedResult[i] = v + 3
 			}
-
 			panicIndex := rand.Intn(3)
 			occurPanicIndex := rand.Intn(jobCount / 2)
 			step1 := func(_ context.Context, j *job) error {
@@ -232,7 +224,6 @@ func TestRunPipeline(t *testing.T) {
 			}
 			stopWhenErr := rand.Intn(2) == 1
 			successCh, errCh := gu.RunPipeline(context.Background(), jobs, stopWhenErr, step1, step2, step3)
-
 			result := make([]*job, 0, jobCount)
 			for {
 				if errCh == nil && successCh == nil {
@@ -255,7 +246,6 @@ func TestRunPipeline(t *testing.T) {
 					}
 				}
 			}
-
 			if stopWhenErr {
 				for _, v := range result {
 					if expectedResult[v.i] != v.x {
@@ -281,7 +271,7 @@ func TestRunPipeline(t *testing.T) {
 				i int
 				x int
 			}
-			ctx, cancel := newCtxCancelWithError()
+			ctx, cancel := NewCtxCancelWithError()
 			jobCount := rand.Intn(91) + 10
 			expectedErr := errors.New("expected error")
 			expectedResult := make(map[int]int, jobCount)
@@ -291,7 +281,6 @@ func TestRunPipeline(t *testing.T) {
 				jobs[i] = &job{i: i, x: v}
 				expectedResult[i] = v + 3
 			}
-
 			cancelIndex := rand.Intn(3)
 			occurCancelIndex := rand.Intn(jobCount / 2)
 			step1 := func(_ context.Context, j *job) error {
@@ -320,7 +309,6 @@ func TestRunPipeline(t *testing.T) {
 			}
 			stopWhenErr := rand.Intn(2) == 1
 			successCh, errCh := gu.RunPipeline(ctx, jobs, stopWhenErr, step1, step2, step3)
-
 			result := make([]*job, 0, jobCount)
 			hasErr := false
 			for {
@@ -345,7 +333,6 @@ func TestRunPipeline(t *testing.T) {
 					}
 				}
 			}
-
 			if !hasErr {
 				if len(result) != len(expectedResult) {
 					t.Errorf("unexpected result: want %v, got %v", len(expectedResult), len(result))
@@ -366,39 +353,34 @@ func TestRunPipeline(t *testing.T) {
 	})
 
 	t.Run("大量数据", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
-			type job struct {
-				x int
-			}
-			jobCount := 1024*10*(rand.Intn(5)+1) + 10
-			stepCount := 50
-			expectedResult := make([]int, jobCount)
-			jobs := make([]*job, jobCount)
-			for i := 0; i < jobCount; i++ {
-				v := rand.Intn(jobCount)
-				jobs[i] = &job{x: v}
-				expectedResult[i] = v + stepCount
-			}
-			sort.Ints(expectedResult)
-
-			steps := make([]func(context.Context, *job) error, stepCount)
-			for i := range steps {
-				steps[i] = func(_ context.Context, j *job) error { j.x++; return nil }
-			}
-			successCh, errCh := gu.RunPipeline(context.Background(), jobs, rand.Intn(2) == 1, steps...)
-
-			result := make([]int, 0, jobCount)
-			for v := range successCh {
-				result = append(result, v.x)
-			}
-			sort.Ints(result)
-			if !reflect.DeepEqual(result, expectedResult) {
-				t.Errorf("unexpected result: want %v, got %v", len(expectedResult), len(result))
-			}
-
-			if err, ok := <-errCh; ok {
-				t.Errorf("unexpected error: want false, got %v, value is %v", ok, err)
-			}
+		type job struct {
+			x int
+		}
+		jobCount := 1024*1024*(rand.Intn(5)+1) + 10
+		stepCount := 50
+		expectedResult := make([]int, jobCount)
+		jobs := make([]*job, jobCount)
+		for i := 0; i < jobCount; i++ {
+			v := rand.Intn(jobCount)
+			jobs[i] = &job{x: v}
+			expectedResult[i] = v + stepCount
+		}
+		sort.Ints(expectedResult)
+		steps := make([]func(context.Context, *job) error, stepCount)
+		for i := range steps {
+			steps[i] = func(_ context.Context, j *job) error { j.x++; return nil }
+		}
+		successCh, errCh := gu.RunPipeline(context.Background(), jobs, rand.Intn(2) == 1, steps...)
+		result := make([]int, 0, jobCount)
+		for v := range successCh {
+			result = append(result, v.x)
+		}
+		sort.Ints(result)
+		if !reflect.DeepEqual(result, expectedResult) {
+			t.Errorf("unexpected result: want %v, got %v", len(expectedResult), len(result))
+		}
+		if err, ok := <-errCh; ok {
+			t.Errorf("unexpected error: want false, got %v, value is %v", ok, err)
 		}
 	})
 }

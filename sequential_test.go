@@ -120,7 +120,7 @@ func TestRunSequentially(t *testing.T) {
 	t.Run("上下文终止", func(t *testing.T) {
 		for i := 0; i < 100; i++ {
 			expectedErr := errors.New("expected error")
-			ctx, cancel := newCtxCancelWithError()
+			ctx, cancel := NewCtxCancelWithError()
 			expectedResult := 0
 			err := gu.RunSequentially(ctx,
 				func(context.Context) error {

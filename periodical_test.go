@@ -27,7 +27,6 @@ func TestRunPeriodically(t *testing.T) {
 			period := time.Millisecond * time.Duration(rand.Intn(100)+100)
 			run := gu.RunPeriodically(period)
 			var now time.Time
-
 			wg := sync.WaitGroup{}
 			wg.Add(3)
 			run(func() { now = time.Now() })
@@ -62,7 +61,6 @@ func TestRunPeriodically(t *testing.T) {
 			run := gu.RunPeriodically(period)
 			var now time.Time
 			occurPanicIndex := rand.Intn(3)
-
 			wg := sync.WaitGroup{}
 			wg.Add(3)
 			run(func() { now = time.Now() })
