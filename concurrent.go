@@ -92,6 +92,10 @@ func RunConcurrently(ctx context.Context, fn ...func(context.Context) error) (wa
 
 	return func(fastExit bool) error {
 		if fastExit {
+			// 已经设置了错误就直接返回。
+			if err.HasSet() {
+				return err.Get()
+			}
 			select {
 			case <-innerCtx.Done(): // 上下文终止了就立刻返回。
 				if !nilCtx && !err.HasSet() {
@@ -107,6 +111,7 @@ func RunConcurrently(ctx context.Context, fn ...func(context.Context) error) (wa
 		}
 
 		wg.Wait()
+		err.Set(nil) // 记上设置标记。
 		return err.Get()
 	}
 }

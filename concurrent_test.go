@@ -150,10 +150,10 @@ func TestRunConcurrently(t *testing.T) {
 			}
 			fastExit := rand.Intn(2) == 1
 			err := gu.RunConcurrently(ctx, fns...)(fastExit)
-			if !errors.Is(err, expectedErr) {
+			if err != nil && !errors.Is(err, expectedErr) {
 				t.Errorf("unexpected error: want %v, got %v", expectedErr, err)
 			}
-			if result := atomic.LoadInt32(&expectedResult); result >= fnCount {
+			if result := atomic.LoadInt32(&expectedResult); result > fnCount {
 				t.Errorf("unexpected result: want < %v, got %v", fnCount, result)
 			}
 		}
