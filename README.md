@@ -3,6 +3,7 @@
 Go 协程工具函数库
 
 [![codecov](https://codecov.io/gh/ivfzhou/goroutine-util/graph/badge.svg?token=JO8RFXW1SP)](https://codecov.io/gh/ivfzhou/goroutine-util)
+[![Go Reference](https://pkg.go.dev/badge/gitee.com/ivfzhou/goroutine-util.svg)](https://pkg.go.dev/gitee.com/ivfzhou/goroutine-util)
 
 # 使用
 
