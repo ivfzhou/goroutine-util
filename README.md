@@ -1,11 +1,11 @@
-# 说明
+# 一、说明
 
 Go 协程工具函数库
 
 [![codecov](https://codecov.io/gh/ivfzhou/goroutine-util/graph/badge.svg?token=JO8RFXW1SP)](https://codecov.io/gh/ivfzhou/goroutine-util)
 [![Go Reference](https://pkg.go.dev/badge/gitee.com/ivfzhou/goroutine-util.svg)](https://pkg.go.dev/gitee.com/ivfzhou/goroutine-util)
 
-# 使用
+# 二、使用
 
 ```shell
 go get gitee.com/ivfzhou/goroutine-util@latest
@@ -86,8 +86,3 @@ func RunPipeline[T any](ctx context.Context, jobs []T, stopWhenErr bool, steps .
 // 注意：若 period 为负数将会触发恐慌。
 func RunPeriodically(period time.Duration) (run func(fn func()))
 ```
-
-# 联系作者
-
-电邮：ifzhou@126.com  
-微信：h899123
