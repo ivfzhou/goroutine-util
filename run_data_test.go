@@ -23,7 +23,7 @@ import (
 
 func TestRunData(t *testing.T) {
 	t.Run("正常运行", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			type job struct {
 				i int
 				x int
@@ -31,7 +31,7 @@ func TestRunData(t *testing.T) {
 			var jobCount = 100
 			jobs := make([]*job, jobCount)
 			expectedResult := make(map[int]int, jobCount)
-			for i := 0; i < jobCount; i++ {
+			for i := range jobCount {
 				jobs[i] = &job{i: i, x: rand.Intn(100)}
 				expectedResult[i] = jobs[i].x + 1
 			}
@@ -51,7 +51,7 @@ func TestRunData(t *testing.T) {
 	})
 
 	t.Run("发生错误", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			type job struct {
 				i int
 				x int
@@ -60,7 +60,7 @@ func TestRunData(t *testing.T) {
 			jobs := make([]*job, jobCount)
 			expectedResult := make(map[int]int, jobCount)
 			expectedErr := errors.New("expected error")
-			for i := 0; i < jobCount; i++ {
+			for i := range jobCount {
 				jobs[i] = &job{i: i, x: rand.Intn(100)}
 				expectedResult[i] = jobs[i].x + 1
 			}
@@ -84,7 +84,7 @@ func TestRunData(t *testing.T) {
 	})
 
 	t.Run("上下文终止", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			type job struct {
 				i int
 				x int
@@ -93,7 +93,7 @@ func TestRunData(t *testing.T) {
 			jobs := make([]*job, jobCount)
 			expectedResult := make(map[int]int, jobCount)
 			expectedErr := errors.New("expected error")
-			for i := 0; i < jobCount; i++ {
+			for i := range jobCount {
 				jobs[i] = &job{i: i, x: rand.Intn(100)}
 				expectedResult[i] = jobs[i].x + 1
 			}
@@ -118,7 +118,7 @@ func TestRunData(t *testing.T) {
 	})
 
 	t.Run("发生恐慌", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			type job struct {
 				i int
 				x int
@@ -127,7 +127,7 @@ func TestRunData(t *testing.T) {
 			jobs := make([]*job, jobCount)
 			expectedResult := make(map[int]int, jobCount)
 			expectedErr := errors.New("expected error")
-			for i := 0; i < jobCount; i++ {
+			for i := range jobCount {
 				jobs[i] = &job{i: i, x: rand.Intn(100)}
 				expectedResult[i] = jobs[i].x + 1
 			}

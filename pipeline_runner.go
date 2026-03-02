@@ -83,11 +83,9 @@ func NewPipelineRunner[T any](ctx context.Context, steps ...func(context.Context
 		default:
 		}
 
-		closePushChanWg.Add(1)
-		go func() {
-			defer closePushChanWg.Done()
+		closePushChanWg.Go(func() {
 			pushChan <- t
-		}()
+		})
 
 		return true
 	}

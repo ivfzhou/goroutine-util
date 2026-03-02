@@ -45,11 +45,11 @@ func ExampleRunConcurrently() {
 
 func TestRunConcurrently(t *testing.T) {
 	t.Run("正常运行", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			const fnCount = 1000
 			expectedResult := int32(0)
 			fns := make([]func(context.Context) error, fnCount)
-			for i := 0; i < fnCount; i++ {
+			for i := range fnCount {
 				fns[i] = func(context.Context) error {
 					time.Sleep(time.Millisecond * 10)
 					atomic.AddInt32(&expectedResult, 1)
@@ -72,13 +72,13 @@ func TestRunConcurrently(t *testing.T) {
 	})
 
 	t.Run("发生错误", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			expectedErr := errors.New("expected error")
 			const fnCount = 1000
 			expectedResult := int32(0)
 			occurErrorIndex := rand.Intn(fnCount)
 			fns := make([]func(context.Context) error, fnCount)
-			for i := 0; i < fnCount; i++ {
+			for i := range fnCount {
 				index := i
 				fns[i] = func(context.Context) error {
 					if index == occurErrorIndex {
@@ -101,13 +101,13 @@ func TestRunConcurrently(t *testing.T) {
 	})
 
 	t.Run("发生恐慌", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			expectedErr := errors.New("expected error")
 			const fnCount = 1000
 			expectedResult := int32(0)
 			panicIndex := rand.Intn(fnCount)
 			fns := make([]func(context.Context) error, fnCount)
-			for i := 0; i < fnCount; i++ {
+			for i := range fnCount {
 				index := i
 				fns[i] = func(context.Context) error {
 					if index == panicIndex {
@@ -130,14 +130,14 @@ func TestRunConcurrently(t *testing.T) {
 	})
 
 	t.Run("上下文终止", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			ctx, cancel := NewCtxCancelWithError()
 			expectedErr := errors.New("expected error")
 			const fnCount = 1000
 			expectedResult := int32(0)
 			cancelIndex := rand.Intn(fnCount / 2)
 			fns := make([]func(context.Context) error, fnCount)
-			for i := 0; i < fnCount; i++ {
+			for i := range fnCount {
 				index := i
 				fns[i] = func(context.Context) error {
 					if index == cancelIndex {
@@ -163,7 +163,7 @@ func TestRunConcurrently(t *testing.T) {
 		var fnCount = 1024*1024*(rand.Intn(5)+1) + 10
 		expectedResult := int32(0)
 		fns := make([]func(context.Context) error, fnCount)
-		for i := 0; i < fnCount; i++ {
+		for i := range fnCount {
 			fns[i] = func(context.Context) error {
 				atomic.AddInt32(&expectedResult, 1)
 				return nil

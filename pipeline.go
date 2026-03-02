@@ -81,8 +81,7 @@ func RunPipeline[T any](ctx context.Context, jobs []T, stopWhenErr bool, steps .
 			select {
 			case errChan <- err:
 			default:
-				errWg.Add(1)
-				go func() { errChan <- err; errWg.Done() }()
+				errWg.Go(func() { errChan <- err })
 			}
 		}
 	}

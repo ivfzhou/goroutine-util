@@ -33,7 +33,7 @@ func ExampleRunSequentially() {
 
 func TestRunSequentially(t *testing.T) {
 	t.Run("正常运行", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			expectedResult := 1
 			err := gu.RunSequentially(context.Background(),
 				func(context.Context) error {
@@ -64,7 +64,7 @@ func TestRunSequentially(t *testing.T) {
 	})
 
 	t.Run("发生错误", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			expectedResult := 0
 			expectedErr := errors.New("expected error")
 			err := gu.RunSequentially(context.Background(),
@@ -91,7 +91,7 @@ func TestRunSequentially(t *testing.T) {
 	})
 
 	t.Run("发生恐慌", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			expectedResult := 0
 			expectedErr := errors.New("expected error")
 			err := gu.RunSequentially(context.Background(),
@@ -118,7 +118,7 @@ func TestRunSequentially(t *testing.T) {
 	})
 
 	t.Run("上下文终止", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			expectedErr := errors.New("expected error")
 			ctx, cancel := NewCtxCancelWithError()
 			expectedResult := 0

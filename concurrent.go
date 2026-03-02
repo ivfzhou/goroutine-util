@@ -96,18 +96,17 @@ func RunConcurrently(ctx context.Context, fn ...func(context.Context) error) (wa
 			if err.HasSet() {
 				return err.Get()
 			}
-			select {
-			case <-innerCtx.Done(): // 上下文终止了就立刻返回。
-				if !nilCtx && !err.HasSet() {
-					select {
-					case <-ctx.Done():
-						err.Set(ctx.Err()) // 可能是顶层上下文终止了。
-					default:
-					}
+
+			<-innerCtx.Done() // 上下文终止了就立刻返回。
+			if !nilCtx && !err.HasSet() {
+				select {
+				case <-ctx.Done():
+					err.Set(ctx.Err()) // 可能是顶层上下文终止了。
+				default:
 				}
-				err.Set(nil) // 记上设置标记。
-				return err.Get()
 			}
+			err.Set(nil) // 记上设置标记。
+			return err.Get()
 		}
 
 		wg.Wait()

@@ -21,7 +21,7 @@ import (
 
 func TestQueue(t *testing.T) {
 	t.Run("正常使用", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			expectedResult := make([]int, 1000)
 			for i := range expectedResult {
 				expectedResult[i] = rand.Intn(100)
@@ -47,7 +47,7 @@ func TestQueue(t *testing.T) {
 	})
 
 	t.Run("关闭后再 Push", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			queue := &gu.Queue[int]{}
 			ok := queue.Push(1)
 			if !ok {

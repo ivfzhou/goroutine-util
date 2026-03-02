@@ -23,7 +23,7 @@ import (
 
 func TestRunPeriodically(t *testing.T) {
 	t.Run("正常运行", func(t *testing.T) {
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			period := time.Millisecond * time.Duration(rand.Intn(100)+100)
 			run := gu.RunPeriodically(period)
 			var now time.Time
@@ -56,7 +56,7 @@ func TestRunPeriodically(t *testing.T) {
 	})
 
 	t.Run("发生恐慌", func(t *testing.T) {
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			period := time.Millisecond * time.Duration(rand.Intn(100)+100)
 			run := gu.RunPeriodically(period)
 			var now time.Time

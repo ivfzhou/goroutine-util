@@ -32,10 +32,10 @@ func ExampleNewRunner() {
 		return nil
 	}
 
-	add, wait := gu.NewRunner[*product](ctx, 12, op)
+	add, wait := gu.NewRunner(ctx, 12, op)
 
 	// 将任务要处理的数据传递给任务处理逻辑 op。
-	var projects []*product
+	projects := make([]*product, 0)
 	for _, v := range projects {
 		if err := add(v, true); err != nil {
 			// 发生错误可能会提前预知。
@@ -50,7 +50,7 @@ func ExampleNewRunner() {
 
 func TestNewRunner(t *testing.T) {
 	t.Run("正常运行", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			maxRoutines := 0
 			if rand.Intn(2) == 1 {
 				maxRoutines = 300
@@ -67,7 +67,7 @@ func TestNewRunner(t *testing.T) {
 			var err error
 			expectedResult := int32(0)
 			const jobCount = 800
-			for i := int32(0); i < jobCount; i++ {
+			for range jobCount {
 				n := rand.Int31n(100)
 				addBlock := rand.Intn(2) == 1
 				err = add(&job{n}, addBlock)
@@ -89,7 +89,7 @@ func TestNewRunner(t *testing.T) {
 	})
 
 	t.Run("发生错误", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			maxRoutines := 0
 			if rand.Intn(2) == 1 {
 				maxRoutines = 300
@@ -98,7 +98,7 @@ func TestNewRunner(t *testing.T) {
 				x, y int32
 			}
 			expectedErr := errors.New("expected error")
-			const jobCount = 800
+			const jobCount int32 = 800
 			occurErrorIndex := rand.Int31n(jobCount / 2)
 			result := int32(0)
 			add, wait := gu.NewRunner(context.Background(), maxRoutines, func(ctx context.Context, t *job) error {
@@ -111,7 +111,7 @@ func TestNewRunner(t *testing.T) {
 			})
 			var err error
 			expectedResult := int32(0)
-			for i := int32(0); i < jobCount; i++ {
+			for i := range jobCount {
 				n := rand.Int31n(100)
 				addBlock := rand.Intn(2) == 1
 				err = add(&job{i, n}, addBlock)
@@ -134,7 +134,7 @@ func TestNewRunner(t *testing.T) {
 	})
 
 	t.Run("发生恐慌", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			maxRoutines := 0
 			if rand.Intn(2) == 1 {
 				maxRoutines = 300
@@ -143,7 +143,7 @@ func TestNewRunner(t *testing.T) {
 				x, y int32
 			}
 			expectedErr := errors.New("expected error")
-			const jobCount = 800
+			const jobCount int32 = 800
 			occurPanicIndex := rand.Int31n(jobCount / 2)
 			result := int32(0)
 			add, wait := gu.NewRunner(context.Background(), maxRoutines, func(ctx context.Context, t *job) error {
@@ -156,7 +156,7 @@ func TestNewRunner(t *testing.T) {
 			})
 			var err error
 			expectedCount := int32(0)
-			for i := int32(0); i < jobCount; i++ {
+			for i := range jobCount {
 				n := rand.Int31n(100)
 				addBlock := rand.Intn(2) == 1
 				err = add(&job{i, n}, addBlock)
@@ -179,7 +179,7 @@ func TestNewRunner(t *testing.T) {
 	})
 
 	t.Run("上下文终止", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			maxRoutines := 0
 			if rand.Intn(2) == 1 {
 				maxRoutines = 300
@@ -190,7 +190,7 @@ func TestNewRunner(t *testing.T) {
 			expectedErr := errors.New("expected error")
 			ctx, cancel := NewCtxCancelWithError()
 			result := int32(0)
-			const jobCount = 800
+			const jobCount int32 = 800
 			cancelIndex := rand.Int31n(jobCount / 2)
 			add, wait := gu.NewRunner(ctx, maxRoutines, func(ctx context.Context, t *job) error {
 				time.Sleep(time.Millisecond * 100)
@@ -202,7 +202,7 @@ func TestNewRunner(t *testing.T) {
 			})
 			var err error
 			expectedResult := int32(0)
-			for i := int32(0); i < jobCount; i++ {
+			for i := range jobCount {
 				n := rand.Int31n(100)
 				addBlock := rand.Intn(2) == 1
 				err = add(&job{i, n}, addBlock)
@@ -225,7 +225,7 @@ func TestNewRunner(t *testing.T) {
 	})
 
 	t.Run("大量add、wait", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			maxRoutines := 0
 			if rand.Intn(2) == 1 {
 				maxRoutines = 300
@@ -242,18 +242,16 @@ func TestNewRunner(t *testing.T) {
 			})
 			wg := sync.WaitGroup{}
 			expectedResult := int32(0)
-			for i := int32(0); i < jobCount; i++ {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+			for range jobCount {
+				wg.Go(func() {
 					n := rand.Int31n(100)
 					_ = add(&job{n}, rand.Intn(2) == 1)
 					atomic.AddInt32(&expectedResult, n)
-				}()
+				})
 			}
 			wg.Wait()
 			waitErrorMap := sync.Map{}
-			for i := 0; i < jobCount; i++ {
+			for i := range jobCount {
 				wg.Add(1)
 				go func(i int) {
 					defer wg.Done()
@@ -278,7 +276,7 @@ func TestNewRunner(t *testing.T) {
 	})
 
 	t.Run("wait后add", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			maxRoutines := 0
 			if rand.Intn(2) == 1 {
 				maxRoutines = 300
@@ -291,30 +289,28 @@ func TestNewRunner(t *testing.T) {
 			const jobCount = 1000
 			callWaitIndex := rand.Int31n(jobCount / 2)
 			wg := sync.WaitGroup{}
-			for i := int32(0); i < jobCount; i++ {
-				if i == callWaitIndex {
+			for i := range jobCount {
+				if i == int(callWaitIndex) {
 					go func() {
 						_ = wait(rand.Int31n(2) == 1)
 					}()
 				}
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					defer func() {
 						p := recover()
 						if p != nil && p != gu.ErrCallAddAfterWait {
-							t.Errorf("unexpected recoverd value: want %v, got %v", gu.ErrCallAddAfterWait, p)
+							t.Errorf("unexpected recovered value: want %v, got %v", gu.ErrCallAddAfterWait, p)
 						}
 					}()
 					_ = add(&job{}, rand.Int31n(2) == 1)
-				}()
+				})
 			}
 			wg.Wait()
 		}
 	})
 
 	t.Run("长时间运行", func(t *testing.T) {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			maxRoutines := 0
 			if rand.Intn(2) == 1 {
 				maxRoutines = 300
@@ -334,7 +330,7 @@ func TestNewRunner(t *testing.T) {
 			})
 			var err error
 			expectedResult := int32(0)
-			for i := int32(0); i < jobCount; i++ {
+			for i := range int32(jobCount) {
 				n := rand.Int31n(100)
 				err = add(&job{n, i}, rand.Intn(2) == 1)
 				expectedResult += n

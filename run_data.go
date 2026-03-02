@@ -86,18 +86,17 @@ func RunData[T any](ctx context.Context, fn func(context.Context, T) error, fast
 		cancel()
 	}()
 
-	select {
-	case <-innerCtx.Done(): // 上下文终止了，可能是发生了错误。
-		if !nilCtx && !err.HasSet() { // 也可能是上层上下文终止了。
-			select {
-			case <-ctx.Done():
-				err.Set(ctx.Err())
-			default:
-			}
+	<-innerCtx.Done()             // 上下文终止了，可能是发生了错误。
+	if !nilCtx && !err.HasSet() { // 也可能是上层上下文终止了。
+		select {
+		case <-ctx.Done():
+			err.Set(ctx.Err())
+		default:
 		}
-		if fastExit {
-			return err.Get()
-		}
+	}
+
+	if fastExit {
+		return err.Get()
 	}
 
 	wg.Wait()

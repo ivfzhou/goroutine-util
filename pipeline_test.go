@@ -56,14 +56,14 @@ func ExampleRunPipeline() {
 
 func TestRunPipeline(t *testing.T) {
 	t.Run("正常运行", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			type job struct {
 				x int
 			}
 			jobCount := 100
 			expectedResult := make([]int, jobCount)
 			jobs := make([]*job, jobCount)
-			for i := 0; i < jobCount; i++ {
+			for i := range jobCount {
 				v := rand.Intn(jobCount)
 				jobs[i] = &job{x: v}
 				expectedResult[i] = v + 3
@@ -101,7 +101,7 @@ func TestRunPipeline(t *testing.T) {
 	})
 
 	t.Run("发生错误", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			type job struct {
 				i int
 				x int
@@ -110,7 +110,7 @@ func TestRunPipeline(t *testing.T) {
 			expectedErr := errors.New("expected error")
 			expectedResult := make(map[int]int, jobCount)
 			jobs := make([]*job, jobCount)
-			for i := 0; i < jobCount; i++ {
+			for i := range jobCount {
 				v := rand.Intn(jobCount)
 				jobs[i] = &job{i: i, x: v}
 				expectedResult[i] = v + 3
@@ -182,7 +182,7 @@ func TestRunPipeline(t *testing.T) {
 	})
 
 	t.Run("发生恐慌", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			type job struct {
 				i int
 				x int
@@ -191,7 +191,7 @@ func TestRunPipeline(t *testing.T) {
 			expectedErr := errors.New("expected error")
 			expectedResult := make(map[int]int, jobCount)
 			jobs := make([]*job, jobCount)
-			for i := 0; i < jobCount; i++ {
+			for i := range jobCount {
 				v := rand.Intn(jobCount)
 				jobs[i] = &job{i: i, x: v}
 				expectedResult[i] = v + 3
@@ -266,7 +266,7 @@ func TestRunPipeline(t *testing.T) {
 	})
 
 	t.Run("上下文终止", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			type job struct {
 				i int
 				x int
@@ -276,7 +276,7 @@ func TestRunPipeline(t *testing.T) {
 			expectedErr := errors.New("expected error")
 			expectedResult := make(map[int]int, jobCount)
 			jobs := make([]*job, jobCount)
-			for i := 0; i < jobCount; i++ {
+			for i := range jobCount {
 				v := rand.Intn(jobCount)
 				jobs[i] = &job{i: i, x: v}
 				expectedResult[i] = v + 3
@@ -360,7 +360,7 @@ func TestRunPipeline(t *testing.T) {
 		stepCount := 50
 		expectedResult := make([]int, jobCount)
 		jobs := make([]*job, jobCount)
-		for i := 0; i < jobCount; i++ {
+		for i := range jobCount {
 			v := rand.Intn(jobCount)
 			jobs[i] = &job{x: v}
 			expectedResult[i] = v + stepCount

@@ -47,7 +47,7 @@ func ExampleNewPipelineRunner() {
 
 func TestNewPipelineRunner(t *testing.T) {
 	t.Run("正常运行", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			type job struct {
 				i int
 				x int
@@ -83,7 +83,7 @@ func TestNewPipelineRunner(t *testing.T) {
 	})
 
 	t.Run("不往下传递", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			type job struct {
 				i int
 				x int
@@ -134,7 +134,7 @@ func TestNewPipelineRunner(t *testing.T) {
 	})
 
 	t.Run("上下文终止", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			type job struct {
 				i int
 				x int

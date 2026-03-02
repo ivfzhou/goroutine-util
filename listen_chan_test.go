@@ -24,7 +24,7 @@ import (
 
 func TestListenChan(t *testing.T) {
 	t.Run("正常运行", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			err1 := make(chan error, rand.Intn(2))
 			err2 := make(chan error, rand.Intn(2))
 			err3 := make(chan error, rand.Intn(2))
@@ -66,7 +66,7 @@ func TestListenChan(t *testing.T) {
 	})
 
 	t.Run("通道都关闭未发送值", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			err1 := make(chan error, rand.Intn(2))
 			err2 := make(chan error, rand.Intn(2))
 			err3 := make(chan error, rand.Intn(2))
@@ -93,7 +93,7 @@ func TestListenChan(t *testing.T) {
 	})
 
 	t.Run("包含空通道", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			err1 := make(chan error, rand.Intn(2))
 			err2 := make(chan error, rand.Intn(2))
 			err3 := make(chan error, rand.Intn(2))
@@ -121,7 +121,7 @@ func TestListenChan(t *testing.T) {
 	})
 
 	t.Run("多个通道发送了值", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			err1 := make(chan error, rand.Intn(2))
 			err2 := make(chan error, rand.Intn(2))
 			err3 := make(chan error, rand.Intn(2))
@@ -151,7 +151,7 @@ func TestListenChan(t *testing.T) {
 	})
 
 	t.Run("监听大量通道", func(t *testing.T) {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			errChans := make([]<-chan error, 500*(rand.Intn(5)+1)+10)
 			sendIndex := rand.Intn(len(errChans))
 			expectedErr := errors.New("expected error")
