@@ -11,8 +11,6 @@ Go 协程工具函数库，提供并发执行、流水线、限频、安全队�
 go get gitee.com/ivfzhou/goroutine-util@latest
 ```
 
-> 需要 Go 1.18+ (支持泛型)
-
 # 三、功能概览
 
 | 模块 | 说明 |

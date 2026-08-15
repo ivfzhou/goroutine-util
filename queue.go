@@ -65,10 +65,6 @@ func (q *Queue[E]) Push(elem E) bool {
 
 // GetFromChan 获取队列头元素。
 func (q *Queue[E]) GetFromChan() <-chan E {
-	if q.getElemChan != nil {
-		return q.getElemChan
-	}
-
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
