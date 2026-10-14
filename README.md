@@ -5,32 +5,11 @@ Go 协程工具函数库，提供并发执行、流水线、限频、安全队�
 [![codecov](https://codecov.io/gh/ivfzhou/goroutine-util/graph/badge.svg?token=JO8RFXW1SP)](https://codecov.io/gh/ivfzhou/goroutine-util)
 [![Go Reference](https://pkg.go.dev/badge/gitee.com/ivfzhou/goroutine-util.svg)](https://pkg.go.dev/gitee.com/ivfzhou/goroutine-util)
 
-# 二、安装
+# 二、API 文档
 
-```shell
-go get gitee.com/ivfzhou/goroutine-util@latest
-```
-
-# 三、功能概览
-
-| 模块 | 说明 |
-|------|------|
-| **Runner** | 有界协程池，动态提交任务，支持错误快速退出 |
-| **RunData** | 批量数据并发处理（一次性） |
-| **RunConcurrently / RunSequentially** | 并发/顺序执行多个函数 |
-| **Pipeline** | 批量流水线，任务依次经过多阶段处理 |
-| **PipelineRunner** | 流式流水线，增量推送任务 |
-| **Queue** | 线程安全队列，支持通道消费 |
-| **ListenChan** | 多通道聚合监听 |
-| **RunPeriodically** | 限频执行，控制调用间隔 |
-| **Error / AtomicError** | 错误包装与原子错误存储 |
-
-# 四、API 文档
-
-## 4.1 Runner — 有界协程池
+## 2.1 Runner — 有界协程池
 
 创建一个最多 `max` 个协程并发运行的执行器，支持动态添加任务。`max <= 0` 时不限制并发数。
-
 ```go
 func NewRunner[T any](ctx context.Context, max int, fn func(context.Context, T) error) (
     add func(t T, block bool) error,
@@ -59,10 +38,9 @@ for _, url := range urls {
 if err := wait(true); err != nil { return err }
 ```
 
-## 4.2 RunData — 批量并发处理
+## 2.2 RunData — 批量并发处理
 
 将一组数据并发交给 `fn` 处理，发生错误立即终止。
-
 ```go
 func RunData[T any](ctx context.Context, fn func(context.Context, T) error, fastExit bool, jobs ...T) error
 ```
@@ -73,7 +51,7 @@ err := RunData(ctx, func(ctx context.Context, id int) error {
 }, true, 1, 2, 3, 4, 5)
 ```
 
-## 4.3 并发 / 顺序执行
+## 2.3 并发 / 顺序执行
 
 ```go
 // 并发运行多个函数，每个函数独立协程
@@ -94,10 +72,9 @@ wait := RunConcurrently(ctx,
 if err := wait(true); err != nil { /* ... */ }
 ```
 
-## 4.4 Pipeline — 批量流水线
+## 2.4 Pipeline — 批量流水线
 
 将所有 `jobs` 依次经过各 `step` 处理，每个 step 内部并发处理 jobs。
-
 ```go
 func RunPipeline[T any](
     ctx context.Context,
@@ -122,10 +99,9 @@ for d := range successCh { fmt.Println("成功:", d) }
 for err := range errCh   { log.Println("失败:", err) }
 ```
 
-## 4.5 PipelineRunner — 流式流水线
+## 2.5 PipelineRunner — 流式流水线
 
 流式版本，支持增量推送任务。step 返回 bool 而非 error（true = 传递给下一步）。
-
 ```go
 func NewPipelineRunner[T any](ctx context.Context, steps ...func(context.Context, T) bool) (
     push func(T) bool,
@@ -151,10 +127,9 @@ go func() {
 for result := range successCh { /* 处理成功结果 */ }
 ```
 
-## 4.6 ListenChan — 多通道监听
+## 2.6 ListenChan — 多通道监听
 
 同时监听多个通道，任意一个收到值即刻返回并关闭输出通道。
-
 ```go
 func ListenChan[T any](chans ...<-chan T) <-chan T
 ```
@@ -164,10 +139,9 @@ result := ListenChan(chA, chB, chC)
 val := <-result // 取到第一个值
 ```
 
-## 4.7 RunPeriodically — 限频执行
+## 2.7 RunPeriodically — 限频执行
 
 确保两次执行之间至少间隔指定时间（上次结束到下次开始之间）。
-
 ```go
 func RunPeriodically(period time.Duration) func(fn func())
 ```
@@ -177,11 +151,3 @@ run := RunPeriodically(time.Second)
 run(func() { doSomething() }) // 立即执行
 run(func() { doSomething() }) // 至少距上次结束 1s 后才执行
 ```
-
-# 五、设计特点
-
-- **Context 传播与取消**：所有 API 接受 `context.Context`，支持级联取消
-- **Panic 恢复**：goroutine 内的 panic 自动捕获为 error，附带完整调用栈
-- **原子错误存储**：基于 CAS 的 `AtomicError`，确保仅保留首个错误
-- **闭包式 API**：通过闭包元组暴露能力，无需维护结构体状态
-- **泛型支持**：全模块泛型，类型安全的并发处理
